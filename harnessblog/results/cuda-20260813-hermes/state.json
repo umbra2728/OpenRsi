@@ -1,0 +1,152 @@
+{
+  "campaign_id": "cuda-20260813-hermes",
+  "created_at": "2026-08-13T10:22:44.789707+00:00",
+  "results": {
+    "heat-2d--hermes--gpt-5.6-sol--r1": {
+      "artifacts": {
+        "heatmap.mp4": "e3afb7004de9f291f01ea97c4dce09f6f996e4d096f4739b809135e461773c14",
+        "heatmap.png": "b02bad525c21059b0141f0eba20bac12400db7a44fe1d312487a178b74da940c",
+        "solution.npz": "21c9569302ebf35e984c73dcfe5862c39cb092a37933ab8ee38b6d7a07063130"
+      },
+      "error": null,
+      "exit_code": 0,
+      "hard_gates": {
+        "artifacts": true,
+        "cuda": false,
+        "numerical": true,
+        "reproducibility": true
+      },
+      "metrics": {
+        "alpha": 0.1,
+        "boundary_error": 0,
+        "contains_nan_or_inf": false,
+        "convergence_relative_l2_errors": [
+          1.01785e-07,
+          6.36566e-09,
+          3.97918e-10
+        ],
+        "convergence_resolutions": [
+          33,
+          65,
+          129
+        ],
+        "cpu_parity_error": 6.42931e-17,
+        "cuda": {
+          "compute_capability": "8.6",
+          "device_count": 1,
+          "device_name": "NVIDIA RTX A6000",
+          "kernel_launches": 6,
+          "kernel_time_ms": 2.69414,
+          "process_id": 3561,
+          "runtime": "CUDA Runtime API",
+          "workload_executed": true
+        },
+        "cuda_process_proof": "CUDA_KERNEL_EXECUTED device='NVIDIA RTX A6000' pid=3561 launches=6 kernel_ms=2.69414",
+        "deterministic": true,
+        "dtype": "float64",
+        "final_time": 0.05,
+        "independent/boundary_error": 0.0,
+        "independent/cpu_parity_error": 1.4195311592857252e-12,
+        "independent/finite": true,
+        "independent/relative_l2_error": 1.5667800505460726e-12,
+        "nx": 512,
+        "ny": 512,
+        "observed_spatial_order": 3.99942,
+        "orchestrator_cuda_process_verified": false,
+        "orchestrator_peak_gpu_memory_mib": 268,
+        "reasoning_visibility": false,
+        "relative_l2_error": 1.5667802256287314e-12,
+        "targets_passed": true,
+        "wall_time_seconds": 282.8208495695144
+      },
+      "passed": false,
+      "run_id": "heat-2d--hermes--gpt-5.6-sol--r1",
+      "score": 80.0,
+      "status": "finished",
+      "usage": {
+        "cost_usd": 1.0051117500000002,
+        "proxy_requests": 30
+      }
+    },
+    "three-body--hermes--gpt-5.6-sol--r1": {
+      "artifacts": {
+        "orbit.mp4": "6b7590a909898abd737a50637c11b7fe05b62902483d175bbbd252d2bd19299a",
+        "orbit.png": "780045521e5a4d576ab61458fdcdf61a0453ec3f34d94f0126647f5ae3b0ef20",
+        "trajectory.npz": "2873bd5ecbefa614eacecee25af922c5832aaf54a4ca12bb030e07932073106e"
+      },
+      "error": null,
+      "exit_code": 0,
+      "hard_gates": {
+        "artifacts": true,
+        "cuda": false,
+        "numerical": true,
+        "reproducibility": false
+      },
+      "metrics": {
+        "cuda": {
+          "compute_capability": "8.6",
+          "device_count": 1,
+          "device_name": "NVIDIA RTX A6000",
+          "grid_blocks": 32,
+          "kernel_elapsed_ms": 1018.38,
+          "kernel_name": "integrate",
+          "process_id": 709,
+          "threads_per_block": 128,
+          "workload_executed": true
+        },
+        "determinism": {
+          "identical": true,
+          "sha256_run_1": "d6a86a9317c20c201b759aa510401111a66e6f8cbc0ed77649062b15db732e6f",
+          "sha256_run_2": "d6a86a9317c20c201b759aa510401111a66e6f8cbc0ed77649062b15db732e6f"
+        },
+        "duration": 6.32591398,
+        "ensemble_size": 4096,
+        "independent/energy_drift": 4.0022273123041296e-14,
+        "independent/momentum_drift": 4.148971178850621e-14,
+        "independent/rms_state_error": 1.822028545432898e-12,
+        "integrator": "fourth-order Yoshida symplectic composition",
+        "orchestrator_cuda_process_verified": false,
+        "orchestrator_peak_gpu_memory_mib": 262,
+        "precision": "float64",
+        "reasoning_visibility": false,
+        "reference": {
+          "atol": 2.3e-14,
+          "method": "SciPy solve_ivp DOP853",
+          "rtol": 2.3e-14
+        },
+        "relative_total_energy_drift": 4.0022273123041296e-14,
+        "rms_state_error": 1.8205233497738302e-12,
+        "samples": 1200,
+        "time_step": 0.0001,
+        "total_momentum_drift": 4.148971178850621e-14,
+        "wall_time_seconds": 167.96799751371145
+      },
+      "passed": false,
+      "run_id": "three-body--hermes--gpt-5.6-sol--r1",
+      "score": 65.0,
+      "status": "finished",
+      "usage": {
+        "cost_usd": 0.58084125,
+        "proxy_requests": 14
+      }
+    },
+    "three-body--hermes--kimi-k3--r1": {
+      "artifacts": {},
+      "error": "agent failed or output/metrics.json missing",
+      "exit_code": 1,
+      "hard_gates": {},
+      "metrics": {
+        "reasoning_visibility": false,
+        "wall_time_seconds": 2671.125913486816
+      },
+      "passed": false,
+      "run_id": "three-body--hermes--kimi-k3--r1",
+      "score": 0.0,
+      "status": "failed",
+      "usage": {
+        "cost_usd": 4.761274380000001,
+        "proxy_requests": 77
+      }
+    }
+  }
+}

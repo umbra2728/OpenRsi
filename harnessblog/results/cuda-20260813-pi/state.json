@@ -1,0 +1,319 @@
+{
+  "campaign_id": "cuda-20260813-pi",
+  "created_at": "2026-08-13T10:22:44.785286+00:00",
+  "results": {
+    "heat-2d--pi--gpt-5.6-sol--r1": {
+      "artifacts": {
+        "heatmap.mp4": "2c5413800f1446922b151b442c44c4ba36fca1ea603afaace40ea5359e93ad7e",
+        "heatmap.png": "20e8d7af55b3c530b53faa53b6048fe5e04c57c0ba6a5aeda5d550efdb6ec68e",
+        "solution.npz": "848c03cfb158845a0ee8a46267b9ec5a76b9d56d12680290d4eec0762e901317"
+      },
+      "error": null,
+      "exit_code": 0,
+      "hard_gates": {
+        "artifacts": true,
+        "cuda": false,
+        "numerical": false,
+        "reproducibility": false
+      },
+      "metrics": {
+        "all_finite": true,
+        "alpha": 0.1,
+        "boundary_error": 0,
+        "compute_capability": "8.6",
+        "contract_passed": true,
+        "convergence": [
+          {
+            "n": 33,
+            "relative_l2": 7.924939755352007e-05
+          },
+          {
+            "n": 65,
+            "observed_order": 1.9996952472942138,
+            "relative_l2": 1.9816534960987382e-05
+          },
+          {
+            "n": 129,
+            "observed_order": 1.9999238140493756,
+            "relative_l2": 4.954395365430143e-06
+          },
+          {
+            "n": 257,
+            "observed_order": 1.999980953576733,
+            "relative_l2": 1.2386151934159027e-06
+          }
+        ],
+        "cpu_parity_max_abs": 1.6653345369377348e-16,
+        "cpu_parity_relative_l2": 7.464186033767857e-17,
+        "cuda_elapsed_ms": 14.150591850280762,
+        "cuda_kernel_launches": 7,
+        "cuda_process_proof": {
+          "device_allocation_attribute_verified": true,
+          "gpu_event_elapsed_ms": 14.150591850280762,
+          "kernel_launches": 7,
+          "pid": 313,
+          "runtime_library_mapped": true
+        },
+        "cuda_runtime_mapped": true,
+        "determinism_bitwise": true,
+        "determinism_mismatches": 0,
+        "device_count": 1,
+        "device_name": "NVIDIA RTX A6000",
+        "device_pointer_verified": true,
+        "exact_solution": "exp(-2*pi^2*alpha*t)*sin(pi*x)*sin(pi*y)",
+        "final_time": 0.05,
+        "gpu_checksum": 95881.82639854336,
+        "independent/boundary_error": 0.0,
+        "independent/cpu_parity_error": 2.816493243074092e-07,
+        "independent/finite": true,
+        "independent/relative_l2_error": 3.108679610520659e-07,
+        "initial_condition": "sin(pi*x)*sin(pi*y)",
+        "method": "second-order central finite differences in space; exact exponential integration of the discrete sine eigenmode",
+        "nx": 512,
+        "ny": 512,
+        "orchestrator_cuda_process_verified": false,
+        "orchestrator_peak_gpu_memory_mib": 274,
+        "precision": "float64",
+        "reasoning_visibility": false,
+        "relative_l2_error": 3.1086796111231243e-07,
+        "targets": {
+          "cpu_parity_max": 1e-08,
+          "relative_l2_max": 1e-05
+        },
+        "wall_time_seconds": 175.58672962430865,
+        "workload_pid": 313
+      },
+      "passed": false,
+      "run_id": "heat-2d--pi--gpt-5.6-sol--r1",
+      "score": 15.0,
+      "status": "finished",
+      "usage": {
+        "cost_usd": 0.31566249999999996,
+        "proxy_requests": 16
+      }
+    },
+    "heat-2d--pi--kimi-k3--r1": {
+      "artifacts": {
+        "heatmap.mp4": "6b2bd915bcafda6c34b8771e773608f04644ec692ca1bfc37aae236e94c96532",
+        "heatmap.png": "55e5ea07243e3949c6b9879a6314d106c6d68b20cdbf1edee9bbd5683184736b",
+        "solution.npz": "4653574f96904a4bc9119e5d68836e08d4b4673bee86dcbca5b6c1d4b7b777e7"
+      },
+      "error": null,
+      "exit_code": 0,
+      "hard_gates": {
+        "artifacts": true,
+        "cuda": true,
+        "numerical": false,
+        "reproducibility": true
+      },
+      "metrics": {
+        "all_pass": true,
+        "alpha": 0.1,
+        "boundary_max_error": 0.0,
+        "convergence": [
+          {
+            "nx": 128,
+            "rel_l2_error": 5.033704861490137e-06
+          },
+          {
+            "nx": 256,
+            "rel_l2_error": 1.2484094327425105e-06
+          },
+          {
+            "nx": 512,
+            "rel_l2_error": 3.108717200286092e-07
+          }
+        ],
+        "convergence_observed_order": [
+          2.011529467077924,
+          2.005699877210885
+        ],
+        "cpu_parity_grid": [
+          64,
+          64
+        ],
+        "cpu_parity_max_abs_error": 3.3306690738754696e-16,
+        "cpu_parity_pass": true,
+        "cpu_parity_rel_l2": 1.376856325496508e-16,
+        "cpu_parity_target": 1e-08,
+        "cpu_reference_steps": 100,
+        "cuda_compute_capability": "8.6",
+        "cuda_device_count": 1,
+        "cuda_device_name": "NVIDIA RTX A6000",
+        "cuda_driver_version": 12090,
+        "cuda_process_proof": "solver process executed CUDA kernels on device 0 ('NVIDIA RTX A6000', cc 8.6); device properties, runtime 12080 and driver 12090 were queried in-process via the CUDA API and 6529 RK2 time steps ran on the GPU",
+        "cuda_runtime_version": 12080,
+        "determinism_max_abs_diff": 0.0,
+        "deterministic": true,
+        "final_time": 0.05,
+        "grid": [
+          512,
+          512
+        ],
+        "independent/boundary_error": 0.0,
+        "independent/cpu_parity_error": 2.816527299165372e-07,
+        "independent/finite": true,
+        "independent/relative_l2_error": 3.108717200286092e-07,
+        "nan_inf_free": true,
+        "orchestrator_cuda_process_verified": true,
+        "orchestrator_peak_gpu_memory_mib": 2300,
+        "reasoning_visibility": false,
+        "relative_l2_error": 3.108717200286092e-07,
+        "relative_l2_pass": true,
+        "relative_l2_target": 1e-05,
+        "solver_checksum": 95881.82639890978,
+        "solver_dt": 7.65814060346148e-06,
+        "solver_steps": 6529,
+        "video_frames": 82,
+        "wall_time_seconds": 640.169621752575
+      },
+      "passed": false,
+      "run_id": "heat-2d--pi--kimi-k3--r1",
+      "score": 50.0,
+      "status": "finished",
+      "usage": {
+        "cost_usd": 0.6398311499999993,
+        "proxy_requests": 12
+      }
+    },
+    "three-body--pi--gpt-5.6-sol--r1": {
+      "artifacts": {
+        "orbit.mp4": "1eba3213bdef8bb15b47803636930aafc6d0636455a26952f30cebf8cbd550d5",
+        "orbit.png": "68d106950b3e5a060455be253abee3bba43d67ae9ec2b2439fa6472b33e6cef6",
+        "trajectory.npz": "287136a39a3606ef0725538c3b71156cf73d12c38398473792d716272e3dd331"
+      },
+      "error": null,
+      "exit_code": 0,
+      "hard_gates": {
+        "artifacts": true,
+        "cuda": true,
+        "numerical": true,
+        "reproducibility": false
+      },
+      "metrics": {
+        "compute_capability": "8.6",
+        "cuda_device_count": 1,
+        "cuda_device_name": "NVIDIA RTX A6000",
+        "cuda_execution_proof": {
+          "cuda_event_elapsed_ms": [
+            1625.34,
+            1607.58
+          ],
+          "cuda_runtime_version": 12080,
+          "kernel_launches": 4,
+          "native_process_pid": 147
+        },
+        "determinism_final_state_hash": "3a29ef223da0e86a",
+        "determinism_identical_seed": true,
+        "dtype": "float64",
+        "duration": 6.32591398,
+        "ensemble_size": 4096,
+        "independent/energy_drift": 1.7941018986190927e-14,
+        "independent/momentum_drift": 1.1201704679945691e-14,
+        "independent/rms_state_error": 3.0880172550643986e-13,
+        "orchestrator_cuda_process_verified": true,
+        "orchestrator_peak_gpu_memory_mib": 262,
+        "reasoning_visibility": false,
+        "reference": "SciPy DOP853, rtol=2.3e-14, atol=2e-15",
+        "relative_total_energy_drift": 1.7768509188246783e-14,
+        "rms_state_error": 9.946812499112896e-14,
+        "samples": 1200,
+        "targets": {
+          "relative_total_energy_drift": 1e-09,
+          "rms_state_error": 1e-08,
+          "total_momentum_drift": 1e-10
+        },
+        "targets_passed": true,
+        "total_momentum_drift": 1.1201704679945691e-14,
+        "wall_time_seconds": 169.2170487223193
+      },
+      "passed": false,
+      "run_id": "three-body--pi--gpt-5.6-sol--r1",
+      "score": 85.0,
+      "status": "finished",
+      "usage": {
+        "cost_usd": 0.29422400000000004,
+        "proxy_requests": 11
+      }
+    },
+    "three-body--pi--kimi-k3--r1": {
+      "artifacts": {
+        "orbit.mp4": "6e8eb1d0ff6094b2e7253603905a726535808fff939609845e27ad463496fffd",
+        "orbit.png": "fe844c41b7ba77afb5d7d9c10effdd0d8f546d938d42a7727766bca6388bd0a9",
+        "trajectory.npz": "a2a19033668bbcd050c6008df8135b09a0e8ff8618684f4dd534192dccb67932"
+      },
+      "error": null,
+      "exit_code": 0,
+      "hard_gates": {
+        "artifacts": true,
+        "cuda": false,
+        "numerical": true,
+        "reproducibility": false
+      },
+      "metrics": {
+        "cuda": {
+          "compute_capability": "8.6",
+          "device_count": 1,
+          "device_name": "NVIDIA RTX A6000",
+          "dtype": "float64"
+        },
+        "cuda_process_proof": {
+          "device_pointer": "0x792808000000",
+          "gpu_checksum": 3.33333283333335e+20,
+          "kernel_probe": {
+            "clock64": 14464120293,
+            "executed_on_sm": true,
+            "globaltimer_ns": 1786617981034612736,
+            "smid": 0
+          },
+          "libcuda_loaded_in_process": true,
+          "nvidia_smi_compute_apps": "732388, [Not Found], 6146 MiB\n499495, [Not Found], 418 MiB",
+          "pid": 579,
+          "pointer_attributes": {
+            "device": 0,
+            "type": 2
+          },
+          "pointer_is_device_memory": true,
+          "process_listed_by_nvidia_smi": false
+        },
+        "determinism": {
+          "bitwise_equal": true,
+          "sha256_run1": "9fb800c13a413a5ed8ff4d9c083e36b3ffe860958aee4789333a2e466f8ee4ae",
+          "sha256_run2": "9fb800c13a413a5ed8ff4d9c083e36b3ffe860958aee4789333a2e466f8ee4ae"
+        },
+        "duration": 6.32591398,
+        "energy_drift_relative": 2.242627373273866e-15,
+        "energy_drift_relative_max": 7.072901715709884e-15,
+        "energy_drift_target": 1e-09,
+        "ensemble_final_energy_std": 2.3373624773322857e-08,
+        "ensemble_size": 4096,
+        "independent/energy_drift": 7.245411513654027e-15,
+        "independent/momentum_drift": 8.480134632154366e-15,
+        "independent/rms_state_error": 3.050858905921715e-13,
+        "integrator": "Gauss-Legendre implicit RK, order 8, fixed step, float64 on CUDA",
+        "momentum_drift": 8.498827956506644e-15,
+        "momentum_drift_target": 1e-10,
+        "orchestrator_cuda_process_verified": false,
+        "orchestrator_peak_gpu_memory_mib": 1408,
+        "reasoning_visibility": false,
+        "reference": {
+          "method": "mpmath.odefun Taylor series, 40-digit arithmetic, tol 1e-32",
+          "num_reference_times": 121
+        },
+        "rms_state_error": 1.3277511409645951e-14,
+        "rms_state_error_target": 1e-08,
+        "samples": 1200,
+        "targets_met": true,
+        "wall_time_seconds": 2164.872933285311
+      },
+      "passed": false,
+      "run_id": "three-body--pi--kimi-k3--r1",
+      "score": 65.0,
+      "status": "finished",
+      "usage": {
+        "cost_usd": 1.1286684000000002,
+        "proxy_requests": 36
+      }
+    }
+  }
+}

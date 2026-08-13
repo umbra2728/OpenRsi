@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "harnessblog"
+version = "0.1.0"
+description = "Isolated CUDA coding-agent benchmark with Tracehouse telemetry"
+requires-python = ">=3.11"
+dependencies = ["tracehouse-sdk==0.6.0", "numpy>=2.0", "scipy>=1.14"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3"]
+
+[project.scripts]
+harnessblog = "harnessblog.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["harnessblog*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

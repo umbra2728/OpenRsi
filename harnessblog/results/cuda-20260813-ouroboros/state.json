@@ -1,0 +1,198 @@
+{
+  "campaign_id": "cuda-20260813-ouroboros",
+  "created_at": "2026-08-13T13:35:01.375427+00:00",
+  "results": {
+    "heat-2d--ouroboros--gpt-5.6-sol--r1": {
+      "artifacts": {},
+      "error": "agent failed or output/metrics.json missing",
+      "exit_code": 0,
+      "hard_gates": {},
+      "metrics": {
+        "reasoning_visibility": false,
+        "wall_time_seconds": 230.83715372625738
+      },
+      "passed": false,
+      "run_id": "heat-2d--ouroboros--gpt-5.6-sol--r1",
+      "score": 0.0,
+      "status": "failed",
+      "usage": {
+        "cost_usd": 1.279251250000001,
+        "proxy_requests": 15
+      }
+    },
+    "heat-2d--ouroboros--kimi-k3--r1": {
+      "artifacts": {
+        "heatmap.mp4": "8544165eea57a6bb32e19c3518127142e80c0b5c728ea97e68eaac6c543f727b",
+        "heatmap.png": "119416bc9a3febb6b4c9b947985a13a88919b4ba0be69919a5f065058a0b1f4e",
+        "solution.npz": "86bd83a4d54e7ffda3ae684027a2e9181ac38fd30ec74570e77d97f942fd9b5f"
+      },
+      "error": null,
+      "exit_code": 0,
+      "hard_gates": {
+        "artifacts": true,
+        "cuda": true,
+        "numerical": false,
+        "reproducibility": false
+      },
+      "metrics": {
+        "boundary": {
+          "max_abs_error": 1.1509414337616321e-17,
+          "tolerance": 1e-14,
+          "type": "dirichlet"
+        },
+        "compute_capability": "8.6",
+        "config": {
+          "alpha": 0.1,
+          "dtype": "float64",
+          "final_time": 0.05,
+          "nx": 512,
+          "ny": 512,
+          "path": "/workspace/config.json",
+          "seed": 20260812
+        },
+        "convergence": {
+          "observed_orders": [
+            2.014,
+            2.005,
+            2.003
+          ],
+          "runs": [
+            {
+              "n": 96,
+              "rel_l2": 1.2558903938303654e-05
+            },
+            {
+              "n": 192,
+              "rel_l2": 3.1096104182056902e-06
+            },
+            {
+              "n": 384,
+              "rel_l2": 7.744563319395314e-07
+            },
+            {
+              "n": 768,
+              "rel_l2": 1.9316022424536674e-07
+            }
+          ]
+        },
+        "cpu_parity": {
+          "cpu_steps": 226,
+          "gpu_steps": 226,
+          "grid": [
+            96,
+            96
+          ],
+          "max_abs": 3.3306690738754696e-16,
+          "rel_l2": 1.3715248438878038e-16
+        },
+        "cuda_device_count": 1,
+        "cuda_device_name": "NVIDIA RTX A6000",
+        "cuda_proof": {
+          "compute_capability": "8.6",
+          "cuda_driver_version": 12090,
+          "cuda_runtime_version": 12080,
+          "device_count": 1,
+          "device_name": "NVIDIA RTX A6000",
+          "kernel_launches": "all timestepping executed by CUDA kernels on the device (no CPU compute fallback exists in the binary)",
+          "linked_cuda_runtime": false,
+          "nvidia_smi_gpus": [
+            "NVIDIA RTX A6000"
+          ],
+          "solver_binary": "/workspace/build/heat2d_cuda",
+          "solver_pid_run1": 476
+        },
+        "determinism": {
+          "bitwise_identical": true,
+          "final_sumsq_run1": 53586.46845830434,
+          "max_abs_diff": 0.0,
+          "runs": 2
+        },
+        "finite": {
+          "n_inf": 0,
+          "n_nan": 0,
+          "no_inf": true,
+          "no_nan": true
+        },
+        "independent/boundary_error": 1.2246410131468395e-16,
+        "independent/cpu_parity_error": 3.942113685484472e-07,
+        "independent/finite": true,
+        "independent/relative_l2_error": 4.3510732616837387e-07,
+        "orchestrator_cuda_process_verified": true,
+        "orchestrator_peak_gpu_memory_mib": 274,
+        "pass": {
+          "all": true,
+          "boundary": true,
+          "cpu_parity": true,
+          "determinism": true,
+          "finite": true,
+          "rel_l2": true
+        },
+        "reasoning_visibility": false,
+        "rel_l2_error": 4.3510732616819906e-07,
+        "solver": {
+          "boundary": "homogeneous Dirichlet (manufactured sine mode satisfies it)",
+          "dt": 7.65814060346148e-06,
+          "gpu_loop_ms": 176.54141235351562,
+          "grid": "uniform on [0,1]^2 including boundary nodes; dx=1/(nx-1), dy=1/(ny-1)",
+          "name": "heat2d_cuda",
+          "scheme": "forward Euler in time, 5-point central differences in space (O(dt) + O(dx^2, dy^2))",
+          "stability": {
+            "alpha_dt_over_dx2_plus_dy2": 0.39994026650329306,
+            "limit": 0.5,
+            "satisfied": true
+          },
+          "steps": 6529
+        },
+        "targets": {
+          "cpu_parity_max_abs": 1e-08,
+          "rel_l2": 1e-05
+        },
+        "wall_time_seconds": 979.7213582908735
+      },
+      "passed": false,
+      "run_id": "heat-2d--ouroboros--kimi-k3--r1",
+      "score": 35.0,
+      "status": "finished",
+      "usage": {
+        "cost_usd": 1.7651857,
+        "proxy_requests": 28
+      }
+    },
+    "three-body--ouroboros--gpt-5.6-sol--r1": {
+      "artifacts": {},
+      "error": "agent failed or output/metrics.json missing",
+      "exit_code": 0,
+      "hard_gates": {},
+      "metrics": {
+        "reasoning_visibility": false,
+        "wall_time_seconds": 205.85316074546427
+      },
+      "passed": false,
+      "run_id": "three-body--ouroboros--gpt-5.6-sol--r1",
+      "score": 0.0,
+      "status": "failed",
+      "usage": {
+        "cost_usd": 1.5623447499999998,
+        "proxy_requests": 17
+      }
+    },
+    "three-body--ouroboros--kimi-k3--r1": {
+      "artifacts": {},
+      "error": "agent failed or output/metrics.json missing",
+      "exit_code": 0,
+      "hard_gates": {},
+      "metrics": {
+        "reasoning_visibility": false,
+        "wall_time_seconds": 1213.198894903995
+      },
+      "passed": false,
+      "run_id": "three-body--ouroboros--kimi-k3--r1",
+      "score": 0.0,
+      "status": "failed",
+      "usage": {
+        "cost_usd": 1.5960487499999996,
+        "proxy_requests": 39
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+Build a complete, self-contained high-accuracy gravitational three-body simulation in this empty workspace. You may choose the implementation language, numerical method, dependencies, build system, and CUDA libraries that best fit the task.
+
+The deliverable must run non-interactively as `./run.sh <config.json> <output_dir>`. It must execute its numerical workload on the visible NVIDIA CUDA GPU (compute capability 8.6), use double precision, and support an ensemble of at least 4096 slightly perturbed initial conditions. A CPU-only implementation or a program that merely detects CUDA is not acceptable.
+
+For the canonical figure-eight initial condition, produce a high-accuracy trajectory and report RMS state error against a trustworthy independent high-precision reference, relative total-energy drift, total-momentum drift, CUDA device count/name, proof that the workload executed in a CUDA process, determinism across two identical-seed runs, and ensemble size. Targets are RMS state error <= 1e-8, energy drift <= 1e-9, and momentum drift <= 1e-10.
+
+Use the standard equal-mass, G=1 figure-eight state: positions `(-0.97000436, 0.24308753)`, `(0.97000436, -0.24308753)`, `(0, 0)` and velocities `(0.466203685, 0.43236573)`, `(0.466203685, 0.43236573)`, `(-0.93240737, -0.86473146)`. `trajectory.npz` must contain float64 arrays `t [N]`, `positions [N,3,2]`, and `velocities [N,3,2]`, covering the requested duration with strictly increasing time.
+
+Write `output/metrics.json`, `output/trajectory.npz`, `output/orbit.png`, and `output/orbit.mp4`. Include tests and concise build/run documentation. Run the implementation as `./run.sh config.json output` and run its tests yourself, inspect failures, and iterate until the contract passes. Do not ask the user questions; make sound engineering choices autonomously.

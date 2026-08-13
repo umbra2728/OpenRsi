@@ -1,0 +1,50 @@
+[
+  {
+    "budget_usd": 4.5,
+    "campaign_id": "cuda-20260813-claude",
+    "harness": "claude",
+    "image": "sha256:8c6c6df412444293a17dfdf32bde76d853cbd321fa4fb80d59be3d2fa08393d9",
+    "model": "openai/gpt-5.6-sol",
+    "prompt_hash": "95475ead5a7e4d70dad8254328f51691d7be439e18bb3800c9e5b7ca237b0d59",
+    "run_id": "three-body--claude--gpt-5.6-sol--r1",
+    "seed": 20260812,
+    "task": "three-body",
+    "timeout_seconds": 3600
+  },
+  {
+    "budget_usd": 4.5,
+    "campaign_id": "cuda-20260813-claude",
+    "harness": "claude",
+    "image": "sha256:8c6c6df412444293a17dfdf32bde76d853cbd321fa4fb80d59be3d2fa08393d9",
+    "model": "moonshotai/kimi-k3",
+    "prompt_hash": "95475ead5a7e4d70dad8254328f51691d7be439e18bb3800c9e5b7ca237b0d59",
+    "run_id": "three-body--claude--kimi-k3--r1",
+    "seed": 20260812,
+    "task": "three-body",
+    "timeout_seconds": 3600
+  },
+  {
+    "budget_usd": 4.5,
+    "campaign_id": "cuda-20260813-claude",
+    "harness": "claude",
+    "image": "sha256:8c6c6df412444293a17dfdf32bde76d853cbd321fa4fb80d59be3d2fa08393d9",
+    "model": "openai/gpt-5.6-sol",
+    "prompt_hash": "1d2fcc6eaa2e37ff3520917a93214fe31164af6e61933eeb4ff527f17e8e85d9",
+    "run_id": "heat-2d--claude--gpt-5.6-sol--r1",
+    "seed": 20260812,
+    "task": "heat-2d",
+    "timeout_seconds": 3600
+  },
+  {
+    "budget_usd": 4.5,
+    "campaign_id": "cuda-20260813-claude",
+    "harness": "claude",
+    "image": "sha256:8c6c6df412444293a17dfdf32bde76d853cbd321fa4fb80d59be3d2fa08393d9",
+    "model": "moonshotai/kimi-k3",
+    "prompt_hash": "1d2fcc6eaa2e37ff3520917a93214fe31164af6e61933eeb4ff527f17e8e85d9",
+    "run_id": "heat-2d--claude--kimi-k3--r1",
+    "seed": 20260812,
+    "task": "heat-2d",
+    "timeout_seconds": 3600
+  }
+]
