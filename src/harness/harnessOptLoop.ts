@@ -16,6 +16,7 @@ import { promisify } from "node:util";
 import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
 import { Evals, type EvalResult, type PlanEntry } from "./evals.js";
+import { logEvent } from "./log.js";
 
 const pexec = promisify(execFile);
 
@@ -64,6 +65,16 @@ async function resetTo(cwd: string, sha: string): Promise<void> {
   await git(cwd, "reset", "--hard", sha);
 }
 
+/** Working-tree diff (staged+unstaged) so we can see exactly what a proposer changed. */
+async function worktreeDiff(cwd: string): Promise<string> {
+  try {
+    await git(cwd, "add", "-A", "-N"); // include new files in the diff
+    return await git(cwd, "diff", "HEAD");
+  } catch {
+    return "";
+  }
+}
+
 /** One think-first proposal: a pi coding-agent edits the target under one lever angle. */
 async function propose(cfg: LoopConfig, lever: string, diagnostics: string): Promise<void> {
   const systemPrompt = [
@@ -98,8 +109,45 @@ async function propose(cfg: LoopConfig, lever: string, diagnostics: string): Pro
     cwd: cfg.targetDir,
     sessionManager: SessionManager.inMemory(cfg.targetDir),
   } as any);
-  await session.prompt(userPrompt);
-  await session.waitForIdle();
+  // Capture the FULL session event stream so an investigation can see exactly what
+  // the proposer did (or why it did nothing — e.g. a failed model call).
+  const events: Array<Record<string, unknown>> = [];
+  let tools = 0;
+  const unsub = session.subscribe((e: any) => {
+    const type = e?.type ?? "?";
+    if (type === "tool_execution_end") tools++;
+    // Keep a compact record of every event; include error-ish fields verbatim.
+    events.push({
+      type,
+      tool: e?.toolName ?? e?.name,
+      attempt: e?.attempt,
+      maxAttempts: e?.maxAttempts,
+      error: e?.error ? String(e.error).slice(0, 400) : e?.errorMessage ? String(e.errorMessage).slice(0, 400) : undefined,
+      willRetry: e?.willRetry,
+    });
+  });
+  logEvent("propose.start", { lever, diagnostics: diagnostics.slice(0, 1500) });
+  let sessionErr: string | undefined;
+  try {
+    await session.prompt(userPrompt);
+    await session.waitForIdle();
+  } catch (e: any) {
+    sessionErr = String(e?.stack || e?.message || e).slice(0, 800);
+  } finally {
+    unsub();
+  }
+  const stats = (session.getSessionStats?.() as any) ?? {};
+  const diff = await worktreeDiff(cfg.targetDir);
+  logEvent("propose.done", {
+    lever,
+    tools,
+    cost: stats?.cost ?? 0,
+    tokens: stats?.tokens ?? stats?.totalTokens,
+    sessionError: sessionErr,
+    editedChars: diff.length,
+    events,
+    diff: diff.slice(0, 6000),
+  });
 }
 
 /** Higher wins; null (unscoreable/broken) is treated as -inf so it never beats the seed. */
@@ -121,8 +169,10 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
   const seedSha = await currentSha(targetDir);
   const devSlice = { start: 0, stop: cfg.devSubset };
 
+  logEvent("loop.start", { seedSha, dev, val, devSubset: cfg.devSubset, generations: cfg.generations });
   const baseline = await evals.evaluate(dev, devSlice);
   log(`baseline dev(${cfg.devSubset}) score=${fmt(baseline.score)} cases=${baseline.numCases}${baseline.error ? ` FAILING: ${baseline.error.slice(0, 200)}` : ""}`);
+  logEvent("baseline", { score: baseline.score, error: baseline.error, cases: baseline.cases });
 
   let championSha = seedSha;
   let championDev = baseline.score;
@@ -139,30 +189,28 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
 
     const lever = LEVERS[(gen - 1) % LEVERS.length];
     log(`gen${gen}: propose [${lever}] from champion ${championSha.slice(0, 8)}`);
+    logEvent("gen.start", { gen, lever, championSha, championDev, remainingDevCases: devPlan?.remainingCases ?? null });
     await resetTo(targetDir, championSha);
     try {
       await propose(cfg, lever, diagnose(championResult));
     } catch (e: any) {
       log(`gen${gen}: proposer error: ${e?.message || e} — skip`);
+      logEvent("gen.proposer_error", { gen, error: String(e?.stack || e).slice(0, 600) });
       await resetTo(targetDir, championSha);
       continue;
     }
     const candSha = await commitAll(targetDir, `gen${gen} [${lever}]`);
     if (!candSha) {
       log(`gen${gen}: no edit produced — skip`);
+      logEvent("gen.no_edit", { gen });
       continue;
     }
 
-    let cand: EvalResult;
-    try {
-      cand = await evals.evaluate(dev, devSlice);
-    } catch (e: any) {
-      log(`gen${gen}: eval error (${e?.message || e}) — revert`);
-      await resetTo(targetDir, championSha);
-      continue;
-    }
+    const cand = await evals.evaluate(dev, devSlice);
     log(`gen${gen}: candidate dev=${fmt(cand.score)} vs champ ${fmt(championDev)}`);
-    if (better(cand.score, championDev)) {
+    const won = better(cand.score, championDev);
+    logEvent("gen.decision", { gen, candSha, candScore: cand.score, championDev, accepted: won });
+    if (won) {
       championSha = candSha;
       championDev = cand.score;
       championResult = cand;
@@ -184,12 +232,15 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
   } catch (e: any) {
     log(`validation confirm failed: ${e?.message || e}`);
   }
+  logEvent("validation", { score: championVal });
   await evals.submit(championSha).then(
-    () => log(`submitted champion ${championSha.slice(0, 8)}`),
-    (e) => log(`submit failed: ${e?.message || e}`),
+    () => { log(`submitted champion ${championSha.slice(0, 8)}`); logEvent("submit", { sha: championSha, ok: true }); },
+    (e) => { log(`submit failed: ${e?.message || e}`); logEvent("submit", { sha: championSha, ok: false, error: String(e?.message || e) }); },
   );
 
-  return { baselineDev: baseline.score, championSha, championDev, championVal, accepted, generations: cfg.generations };
+  const result = { baselineDev: baseline.score, championSha, championDev, championVal, accepted, generations: cfg.generations };
+  logEvent("loop.done", result);
+  return result;
 }
 
 /** Diagnostics fed to the proposer: a hard failure (with root cause) takes priority over low cases. */

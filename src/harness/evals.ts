@@ -22,6 +22,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { logEvent } from "./log.js";
 
 const pexec = promisify(execFile);
 
@@ -105,6 +106,8 @@ export class Evals {
     if (subset?.stop != null) args.push("--stop", String(subset.stop));
     for (const id of subset?.caseIds ?? []) args.push("--case-id", id);
 
+    const t0 = Date.now();
+    logEvent("eval.run", { backend: entry.backend, evalSet: entry.name, partition: entry.partition, subset: subset ?? null, args });
     let raw: string;
     try {
       raw = await this.runTransientRetry(args);
@@ -115,9 +118,13 @@ export class Evals {
       const cliErr = String(e?.message || e).slice(0, 800);
       const recorded = this.readNewestResult(entry.partition, cliErr, true);
       const perCase = recorded.cases.map((c) => c.error).filter(Boolean).slice(0, 4).join(" | ");
-      return { ...recorded, score: null, error: perCase ? `${cliErr}\nroot cause: ${perCase}` : cliErr };
+      const res = { ...recorded, score: null, error: perCase ? `${cliErr}\nroot cause: ${perCase}` : cliErr };
+      logEvent("eval.result", { partition: entry.partition, ok: false, score: null, numCases: res.numCases, durationMs: Date.now() - t0, error: res.error, cases: res.cases });
+      return res;
     }
-    return this.readNewestResult(entry.partition, raw);
+    const res = this.readNewestResult(entry.partition, raw);
+    logEvent("eval.result", { partition: entry.partition, ok: true, score: res.score, numCases: res.numCases, durationMs: Date.now() - t0, evaluationId: res.evaluationId, cases: res.cases, raw: raw.slice(-1200) });
+    return res;
   }
 
   /** Retry ONLY transient infra errors; a deterministic eval failure is returned, not retried. */

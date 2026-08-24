@@ -22,6 +22,7 @@ import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
 import type { Model } from "@earendil-works/pi-ai";
 import { Evals, type PlanEntry } from "./harness/evals.js";
 import { runLoop, type LoopConfig } from "./harness/harnessOptLoop.js";
+import { logEvent } from "./harness/log.js";
 
 /** Build the optimizer model against the gateway (OpenAI-compatible producer scope). */
 function buildOptimizerModel(): Model<any> {
@@ -74,6 +75,15 @@ async function main() {
   const evals = new Evals({ cwd: targetDir });
   const plan = evals.plan();
   log(`context=${evals.contextDir} plan=${plan.map((p) => `${p.partition}/${p.backend}(${p.disclosure},${p.cases})`).join(" ")}`);
+  logEvent("start", {
+    context: evals.contextDir,
+    optimizerModel: process.env.OPENRSI_OPTIMIZER_MODEL,
+    provider: process.env.OPENRSI_PROVIDER || "openai",
+    gatewayBaseUrl: process.env.OPENAI_BASE_URL,
+    hasGatewayKey: !!process.env.OPENAI_API_KEY,
+    targetDir,
+    plan,
+  });
   const { dev, val } = pickEvals(plan);
   log(`iterate on ${dev.partition} (${dev.backend}); select on ${val.partition} (${val.backend}); model=${process.env.OPENRSI_OPTIMIZER_MODEL}`);
 
@@ -95,6 +105,7 @@ async function main() {
 }
 
 main().catch((e) => {
+  logEvent("fatal", { error: String(e?.stack || e).slice(0, 2000) });
   process.stderr.write(`[openrsi] FATAL: ${e?.stack || e}\n`);
   process.exit(1);
 });
