@@ -35,9 +35,18 @@ LABEL="${OPENRSI_RUN_LABEL:-${TASK}__${MODEL_LABEL}__${TS}}"
 LIVE="${OPENRSI_LIVE_DIR:-$LIVE_ROOT/$LABEL}"
 BUILD="$HEB/$TASK/baseline/build.yaml"
 
-[ -f "$BUILD" ] || { echo "no build.yaml for task '$TASK' at $BUILD" >&2; exit 1; }
-[ -f "$SECRETS" ] || { echo "secrets env not found: $SECRETS" >&2; exit 1; }
-[ -x "$UV" ] || { echo "uv not executable: $UV" >&2; exit 1; }
+[ -f "$BUILD" ] || {
+  echo "no build.yaml for task '$TASK' at $BUILD" >&2
+  exit 1
+}
+[ -f "$SECRETS" ] || {
+  echo "secrets env not found: $SECRETS" >&2
+  exit 1
+}
+[ -x "$UV" ] || {
+  echo "uv not executable: $UV" >&2
+  exit 1
+}
 
 : "${OPENRSI_GIT_URL:?set OPENRSI_GIT_URL to the pushed OpenRSI integration remote}"
 : "${OPENRSI_GIT_REF:?set OPENRSI_GIT_REF to an immutable integration commit SHA}"
@@ -67,7 +76,9 @@ echo "results=$RESULTS"
 echo "OPENRSI_GIT_URL=$OPENRSI_GIT_URL"
 echo "OPENRSI_GIT_REF=$OPENRSI_GIT_REF"
 echo "generations=${OPENRSI_GENERATIONS:-6} dev_subset=${OPENRSI_DEV_SUBSET:-8} reserve_val=${OPENRSI_RESERVE_VAL:-8}"
-printf 'cmd: '; printf '%q ' "${CMD[@]}"; echo
+printf 'cmd: '
+printf '%q ' "${CMD[@]}"
+echo
 
 if [ "$GO" != "--go" ]; then
   echo "[dry] not launching; pass --go to spend Modal and model budget."
@@ -88,7 +99,7 @@ cp "$BUILD" "$LIVE/build.used.yaml"
   echo "generations=${OPENRSI_GENERATIONS:-6}"
   echo "dev_subset=${OPENRSI_DEV_SUBSET:-8}"
   echo "reserve_val=${OPENRSI_RESERVE_VAL:-8}"
-} > "$LIVE/launch.env"
+} >"$LIVE/launch.env"
 
 archive_once() {
   local rc="$1"

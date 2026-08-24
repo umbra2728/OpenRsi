@@ -17,10 +17,22 @@ UVX="${UVX:-${UV}x}"
 HARBOR_REQUIREMENT="${HARBOR_REQUIREMENT:-harbor[modal]==0.20.0}"
 VENV_PY="$VENV_PROJ/.venv/bin/python"
 
-[ -f "$ADAPTER_SRC" ] || { echo "adapter not found: $ADAPTER_SRC" >&2; exit 1; }
-[ -x "$UV" ] || { echo "uv not executable: $UV" >&2; exit 1; }
-[ -x "$UVX" ] || { echo "uvx not executable: $UVX" >&2; exit 1; }
-[ -x "$VENV_PY" ] || { echo "project python not executable: $VENV_PY" >&2; exit 1; }
+[ -f "$ADAPTER_SRC" ] || {
+  echo "adapter not found: $ADAPTER_SRC" >&2
+  exit 1
+}
+[ -x "$UV" ] || {
+  echo "uv not executable: $UV" >&2
+  exit 1
+}
+[ -x "$UVX" ] || {
+  echo "uvx not executable: $UVX" >&2
+  exit 1
+}
+[ -x "$VENV_PY" ] || {
+  echo "project python not executable: $VENV_PY" >&2
+  exit 1
+}
 
 cd "$VENV_PROJ"
 VENV_HP="$("$UV" run python -c 'import harbor,inspect,os; print(os.path.dirname(inspect.getfile(harbor)))')"
