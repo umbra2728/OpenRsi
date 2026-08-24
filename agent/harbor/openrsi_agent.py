@@ -32,7 +32,10 @@ class OpenRsi(BaseInstalledAgent):
 
     SUPPORTS_RESUME: bool = False
     _OUTPUT_FILENAME = "openrsi.txt"
-    _CHECKOUT = "/work/openrsi"
+    # Clone OpenRSI under the agent's writable $HOME. /work/agent is the TARGET
+    # (edited/scored) and /work is root-owned, so the unprivileged agent cannot
+    # create /work/openrsi.
+    _CHECKOUT = "$HOME/openrsi"
 
     @staticmethod
     @override
@@ -42,7 +45,7 @@ class OpenRsi(BaseInstalledAgent):
 
     @override
     def get_version_command(self) -> str | None:
-        return f"cat {shlex.quote(self._CHECKOUT)}/package.json | grep '\"version\"' | head -1"
+        return "cat \"$HOME/openrsi/package.json\" | grep '\"version\"' | head -1"
 
     @override
     def parse_version(self, stdout: str) -> str:
@@ -64,8 +67,8 @@ class OpenRsi(BaseInstalledAgent):
             command=(
                 "set -euo pipefail; "
                 f"{nvm_node_install_snippet()} && "
-                f"git clone {shlex.quote(git_url)} {shlex.quote(self._CHECKOUT)} && "
-                f"cd {shlex.quote(self._CHECKOUT)} && git checkout {shlex.quote(git_ref)} && "
+                f"git clone {shlex.quote(git_url)} \"$HOME/openrsi\" && "
+                f"cd \"$HOME/openrsi\" && git checkout {shlex.quote(git_ref)} && "
                 "npm ci --no-audit --no-fund && npx tsc -p tsconfig.json && "
                 "test -f dist/runHarnessOpt.js"
             ),
@@ -102,7 +105,7 @@ class OpenRsi(BaseInstalledAgent):
         await self.exec_as_agent(
             environment,
             command=(
-                f". ~/.nvm/nvm.sh; cd {shlex.quote(self._CHECKOUT)}; "
+                f". ~/.nvm/nvm.sh; cd \"$HOME/openrsi\"; "
                 f"node dist/runHarnessOpt.js {escaped} "
                 f"2>&1 | stdbuf -oL tee /logs/agent/{self._OUTPUT_FILENAME}"
             ),
