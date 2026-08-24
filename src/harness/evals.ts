@@ -37,10 +37,12 @@ export interface PlanEntry {
 }
 
 export interface EvalResult {
-  score: number | null;
+  score: number | null; // null = the evaluation itself failed (target errored / eval infra 502)
   numCases: number | null;
-  cases: Array<{ caseId: string; score: number | null; status?: string }>;
+  cases: Array<{ caseId: string; score: number | null; status?: string; error?: string }>;
   evaluationId: string | null;
+  /** Present when the eval failed: the CLI error plus any per-case root cause (e.g. model_denied). */
+  error?: string;
   raw: string;
 }
 
@@ -86,7 +88,14 @@ export class Evals {
     }));
   }
 
-  /** Score the CURRENT git commit on `entry`'s partition (optionally a case subset). */
+  /**
+   * Score the CURRENT git commit on `entry`'s partition. A failed evaluation is a
+   * NORMAL outcome (the target may be a broken seed that must be fixed by editing
+   * its code) — we NEVER throw for it. Instead we return `score: null` with the
+   * failure captured in `error` (CLI message + any per-case root cause such as a
+   * `model_denied`), so the loop can keep going and hand the diagnosis to the
+   * proposer. We only retry genuinely transient infra errors (socket/connection).
+   */
   async evaluate(
     entry: PlanEntry,
     subset?: { start?: number; stop?: number; caseIds?: string[] },
@@ -95,22 +104,24 @@ export class Evals {
     if (subset?.start != null) args.push("--start", String(subset.start));
     if (subset?.stop != null) args.push("--stop", String(subset.stop));
     for (const id of subset?.caseIds ?? []) args.push("--case-id", id);
-    const raw = await this.runWithRetry(args);
+
+    let raw: string;
+    try {
+      raw = await this.runTransientRetry(args);
+    } catch (e: any) {
+      // The eval RAN but the target failed (e.g. 502 "evaluation failed" wrapping a
+      // model_denied), or infra gave up. Record it, and enrich with the per-case
+      // root cause from the persisted (failed) result so the proposer can act on it.
+      const cliErr = String(e?.message || e).slice(0, 800);
+      const recorded = this.readNewestResult(entry.partition, cliErr, true);
+      const perCase = recorded.cases.map((c) => c.error).filter(Boolean).slice(0, 4).join(" | ");
+      return { ...recorded, score: null, error: perCase ? `${cliErr}\nroot cause: ${perCase}` : cliErr };
+    }
     return this.readNewestResult(entry.partition, raw);
   }
 
-  /**
-   * `evals run`, resilient to TRANSIENT eval failures. The gateway occasionally
-   * returns a 502 / model_denied while a scope token is warming up (observed: a
-   * clean run still logs a few such hiccups and passes). We retry a couple of
-   * times with backoff — but never retry a client-side usage error (bad flags),
-   * and cap attempts so we don't burn the case-pass budget.
-   */
-  private async runWithRetry(args: string[], attempts = 6): Promise<string> {
-    // The gateway's per-scope token warms up lazily: the first 1-2 evals after a
-    // fresh container reliably 502 with model_denied, then it works (observed in a
-    // known-good claude-code run: 2 denied dev evals, then 1.0/0.5). Failed evals
-    // are not charged, so we retry generously (~4 min total) to clear the warmup.
+  /** Retry ONLY transient infra errors; a deterministic eval failure is returned, not retried. */
+  private async runTransientRetry(args: string[], attempts = 2): Promise<string> {
     let lastErr: any;
     for (let i = 0; i < attempts; i++) {
       try {
@@ -118,12 +129,10 @@ export class Evals {
       } catch (e: any) {
         lastErr = e;
         const msg = String(e?.message || e);
-        if (/No such option|Usage:|invalid evaluation request/i.test(msg)) throw e; // deterministic, don't retry
-        if (i < attempts - 1) {
-          const waitMs = Math.min((i + 1) * 25000, 60000);
-          process.stderr.write(`[evals] run failed (attempt ${i + 1}/${attempts}): ${msg.slice(0, 160)} — retry in ${waitMs / 1000}s\n`);
-          await new Promise((r) => setTimeout(r, waitMs));
-        }
+        const transient = /ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|EAI_AGAIN|network|timeout/i.test(msg);
+        if (!transient || i === attempts - 1) throw e; // deterministic eval failure -> caller records it
+        process.stderr.write(`[evals] transient run error (attempt ${i + 1}/${attempts}): ${msg.slice(0, 120)} — retry in 10s\n`);
+        await new Promise((r) => setTimeout(r, 10000));
       }
     }
     throw lastErr;
@@ -134,35 +143,46 @@ export class Evals {
     await this.exec(["submit", "--version", commit]);
   }
 
-  /** Read the newest persisted result for `partition` from `.evals/results/`. */
-  private readNewestResult(partition: string, raw: string): EvalResult {
-    const idxPath = join(this.context, "results", "index.json");
-    if (!existsSync(idxPath)) return { score: null, numCases: null, cases: [], evaluationId: null, raw };
-    const idx = JSON.parse(readFileSync(idxPath, "utf8"));
-    const entries = (idx.evaluations ?? []).filter((e: any) => e.partition === partition);
-    const entry = entries[entries.length - 1]; // sequential loop => newest is last appended
-    if (!entry) return { score: null, numCases: null, cases: [], evaluationId: null, raw };
-    const docPath = join(this.context, "results", String(entry.path));
-    const doc = JSON.parse(readFileSync(docPath, "utf8"));
-    const r = doc.result ?? {};
-    const score = firstNum(dig(r, "objective", "value"), dig(r, "metrics", "score"), dig(r, "report", "metrics", "score"));
-    const caseFiles = Array.isArray(r.case_files) ? r.case_files : [];
-    const cases = caseFiles.map((cf: any) => {
-      try {
-        const cdoc = JSON.parse(readFileSync(join(dirname(docPath), String(cf.path)), "utf8"));
-        const c = cdoc.result ?? {};
-        return { caseId: String(c.case_id ?? ""), score: firstNum(dig(c, "metrics", "score")), status: c.status };
-      } catch {
-        return { caseId: "", score: null };
-      }
-    });
-    return {
-      score,
-      numCases: firstNum(r.total_cases, caseFiles.length),
-      cases,
-      evaluationId: (entry.evaluation_id ?? null) as string | null,
-      raw,
-    };
+  /**
+   * Read the newest persisted result for `partition` from `.evals/results/`.
+   * Also used after a FAILED eval to recover the per-case root cause; on a read
+   * problem it returns an empty (null-score) result rather than throwing.
+   */
+  private readNewestResult(partition: string, raw: string, failing = false): EvalResult {
+    const empty = (): EvalResult => ({ score: null, numCases: null, cases: [], evaluationId: null, raw, ...(failing ? { error: raw } : {}) });
+    try {
+      const idxPath = join(this.context, "results", "index.json");
+      if (!existsSync(idxPath)) return empty();
+      const idx = JSON.parse(readFileSync(idxPath, "utf8"));
+      const entries = (idx.evaluations ?? []).filter((e: any) => e.partition === partition);
+      const entry = entries[entries.length - 1]; // sequential loop => newest is last appended
+      if (!entry) return empty();
+      const docPath = join(this.context, "results", String(entry.path));
+      const doc = JSON.parse(readFileSync(docPath, "utf8"));
+      const r = doc.result ?? {};
+      const score = firstNum(dig(r, "objective", "value"), dig(r, "metrics", "score"), dig(r, "report", "metrics", "score"));
+      const caseFiles = Array.isArray(r.case_files) ? r.case_files : [];
+      const cases = caseFiles.map((cf: any) => {
+        try {
+          const cdoc = JSON.parse(readFileSync(join(dirname(docPath), String(cf.path)), "utf8"));
+          const c = cdoc.result ?? {};
+          const errs = Array.isArray(c.errors) ? c.errors : [];
+          const error = errs[0]?.code ?? errs[0]?.message ?? dig(c, "output", "error_category") ?? dig(c, "output", "error");
+          return { caseId: String(c.case_id ?? ""), score: firstNum(dig(c, "metrics", "score")), status: c.status, error: error ? String(error).slice(0, 400) : undefined };
+        } catch {
+          return { caseId: "", score: null };
+        }
+      });
+      return {
+        score,
+        numCases: firstNum(r.total_cases, caseFiles.length),
+        cases,
+        evaluationId: (entry.evaluation_id ?? null) as string | null,
+        raw,
+      };
+    } catch {
+      return empty();
+    }
   }
 }
 

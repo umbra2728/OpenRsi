@@ -72,15 +72,23 @@ async function propose(cfg: LoopConfig, lever: string, diagnostics: string): Pro
     "directory; keep the agent importable and its entry class/interface intact. Prefer a small,",
     "mechanistically-justified change over a rewrite. Think first: state the causal mechanism, the",
     "expected direction of the metric, and what would falsify it — THEN make the edit.",
+    "",
+    "The current agent may be OUTRIGHT BROKEN (it can fail to run at all — a wrong model string,",
+    "a bad request, a crash). A failing evaluation is a signal to DIAGNOSE and FIX the root cause,",
+    "not a reason to stop. You have a shell: read the target code, and inspect the read-only",
+    "`.evals/` context and traces (`evals cases <id>`, `evals trace <id> <case>`, files under",
+    "`.evals/results/`) to see the exact error before editing.",
   ].join("\n");
   const userPrompt = [
     `# Improve the target agent (this round's angle: ${lever})`,
     "",
-    "## Development diagnostics (what the current agent gets wrong)",
+    "## Current evaluation diagnostics",
     diagnostics || "(no diagnostics yet — read the code and the task resources first)",
     "",
-    "Make ONE focused edit under the angle above. Watch per-case latency: a slower agent can score",
-    "worse by exceeding a case's wall-clock limit. Edit in place; do not commit (the loop commits).",
+    "If the evaluation is FAILING (errors, not just low score), fixing that failure is the priority",
+    "this round regardless of the angle above. Otherwise make ONE focused edit under the angle.",
+    "Watch per-case latency: a slower agent can score worse by exceeding a case's wall-clock limit.",
+    "Edit in place; do not commit (the loop commits for you).",
   ].join("\n");
 
   const { session } = await createAgentSession({
@@ -114,10 +122,11 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
   const devSlice = { start: 0, stop: cfg.devSubset };
 
   const baseline = await evals.evaluate(dev, devSlice);
-  log(`baseline dev(${cfg.devSubset}) score=${fmt(baseline.score)} cases=${baseline.numCases}`);
+  log(`baseline dev(${cfg.devSubset}) score=${fmt(baseline.score)} cases=${baseline.numCases}${baseline.error ? ` FAILING: ${baseline.error.slice(0, 200)}` : ""}`);
 
   let championSha = seedSha;
   let championDev = baseline.score;
+  let championResult: EvalResult = baseline; // diagnostics source; updated on each accept
   let accepted = 0;
 
   for (let gen = 1; gen <= cfg.generations; gen++) {
@@ -132,7 +141,7 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
     log(`gen${gen}: propose [${lever}] from champion ${championSha.slice(0, 8)}`);
     await resetTo(targetDir, championSha);
     try {
-      await propose(cfg, lever, summarizeCases(baseline));
+      await propose(cfg, lever, diagnose(championResult));
     } catch (e: any) {
       log(`gen${gen}: proposer error: ${e?.message || e} — skip`);
       await resetTo(targetDir, championSha);
@@ -156,6 +165,7 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
     if (better(cand.score, championDev)) {
       championSha = candSha;
       championDev = cand.score;
+      championResult = cand;
       accepted++;
       log(`gen${gen}: ACCEPT`);
     } else {
@@ -182,10 +192,13 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
   return { baselineDev: baseline.score, championSha, championDev, championVal, accepted, generations: cfg.generations };
 }
 
-function summarizeCases(r: EvalResult): string {
-  if (!r.cases.length) return "";
+/** Diagnostics fed to the proposer: a hard failure (with root cause) takes priority over low cases. */
+function diagnose(r: EvalResult): string {
+  if (r.error) return `The current agent's evaluation is FAILING (fix this first):\n${r.error}`;
+  const withErr = r.cases.filter((c) => c.error).slice(0, 6).map((c) => `${c.caseId}: ${c.error}`);
+  if (withErr.length) return `Cases with errors:\n${withErr.join("\n")}`;
   const low = r.cases.filter((c) => (c.score ?? 0) <= 0).slice(0, 12).map((c) => c.caseId).filter(Boolean);
-  return low.length ? `Failing/low cases (sample): ${low.join(", ")}` : "";
+  return low.length ? `Failing/low-scoring cases (sample): ${low.join(", ")}` : "(agent runs; look for quality improvements)";
 }
 function fmt(n: number | null): string {
   return n == null ? "n/a" : n.toFixed(4);
