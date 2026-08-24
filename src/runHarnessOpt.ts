@@ -24,27 +24,35 @@ import { Evals, type PlanEntry } from "./harness/evals.js";
 import { runLoop, type LoopConfig } from "./harness/harnessOptLoop.js";
 import { logEvent } from "./harness/log.js";
 
-/** Build the optimizer model against the gateway (OpenAI-compatible producer scope). */
+/**
+ * Build the optimizer model pointed at the injected gateway.
+ *
+ * pi-ai models carry their endpoint IN the model object (`baseUrl` + `api`), and
+ * the SDK client uses `model.baseUrl` exclusively — `OPENAI_BASE_URL` is NOT read
+ * at call time. So we must set `baseUrl` to the gateway ourselves. We also force
+ * `api: "openai-completions"` (the gateway speaks OpenAI `/chat/completions`, like
+ * the working openrouter path in provider.ts), because the plain "openai" catalog
+ * entry defaults to `openai-responses` (`/responses`), which the gateway need not
+ * implement. Auth stays on the `openai` provider → `OPENAI_API_KEY` (the injected
+ * producer-scope token).
+ */
 function buildOptimizerModel(): Model<any> {
   const id = process.env.OPENRSI_OPTIMIZER_MODEL?.trim() || "anthropic/claude-opus-5";
-  const provider = process.env.OPENRSI_PROVIDER?.trim() || "openai";
   const factory = getBuiltinModel as unknown as (p: string, id: string) => Model<any> | null;
-  let model: Model<any> | null = null;
-  try {
-    model = factory(provider, id);
-  } catch {
-    model = null;
-  }
-  if (!model) {
-    // Non-catalog id: clone a known OpenAI-compatible model and override the id
-    // (the id is the model string the gateway forwards), mirroring provider.ts.
-    const base = factory("openai", "gpt-4o") ?? factory("openrouter", "anthropic/claude-sonnet-5");
-    if (!base) throw new Error(`cannot build optimizer model "${id}"`);
-    model = { ...(base as any), id, name: id } as Model<any>;
-    process.stderr.write(`[runHarnessOpt] built non-catalog gateway model "${id}" via ${provider}\n`);
-  }
+  const base = factory("openai", "gpt-4o");
+  if (!base) throw new Error("cannot build base openai model for the gateway");
+  const gatewayBaseUrl = process.env.OPENAI_BASE_URL?.trim();
+  const model = {
+    ...(base as any),
+    id,
+    name: id,
+    api: process.env.OPENRSI_MODEL_API?.trim() || "openai-completions",
+    ...(gatewayBaseUrl ? { baseUrl: gatewayBaseUrl } : {}),
+    reasoning: (process.env.OPENRSI_MODEL_REASONING ?? "off") === "on",
+  } as Model<any>;
   const maxTok = Number(process.env.OPENRSI_MODEL_MAX_TOKENS || 0);
   if (maxTok > 0) (model as any).maxTokens = maxTok;
+  logEvent("model.built", { id, api: (model as any).api, baseUrl: (model as any).baseUrl, provider: (model as any).provider });
   return model;
 }
 

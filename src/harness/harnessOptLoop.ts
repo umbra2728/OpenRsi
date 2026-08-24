@@ -113,16 +113,22 @@ async function propose(cfg: LoopConfig, lever: string, diagnostics: string): Pro
   // the proposer did (or why it did nothing — e.g. a failed model call).
   const events: Array<Record<string, unknown>> = [];
   let tools = 0;
+  let modelErr: string | undefined; // an errored model turn ends the loop WITHOUT throwing
   const unsub = session.subscribe((e: any) => {
     const type = e?.type ?? "?";
     if (type === "tool_execution_end") tools++;
-    // Keep a compact record of every event; include error-ish fields verbatim.
+    // A failed model call surfaces as an assistant message with stopReason "error"
+    // and the text at message.errorMessage — not as a thrown exception. Capture it.
+    const stopReason = e?.message?.stopReason ?? e?.stopReason;
+    const errText = e?.message?.errorMessage ?? e?.error ?? e?.errorMessage;
+    if (stopReason === "error" || stopReason === "aborted") modelErr = String(errText ?? stopReason).slice(0, 600);
     events.push({
       type,
       tool: e?.toolName ?? e?.name,
+      stopReason,
       attempt: e?.attempt,
       maxAttempts: e?.maxAttempts,
-      error: e?.error ? String(e.error).slice(0, 400) : e?.errorMessage ? String(e.errorMessage).slice(0, 400) : undefined,
+      error: errText ? String(errText).slice(0, 400) : undefined,
       willRetry: e?.willRetry,
     });
   });
@@ -136,6 +142,7 @@ async function propose(cfg: LoopConfig, lever: string, diagnostics: string): Pro
   } finally {
     unsub();
   }
+  sessionErr = sessionErr ?? modelErr; // surface a silent errored turn as the proposer failure
   const stats = (session.getSessionStats?.() as any) ?? {};
   const diff = await worktreeDiff(cfg.targetDir);
   logEvent("propose.done", {
