@@ -106,7 +106,11 @@ export class Evals {
    * times with backoff — but never retry a client-side usage error (bad flags),
    * and cap attempts so we don't burn the case-pass budget.
    */
-  private async runWithRetry(args: string[], attempts = 3): Promise<string> {
+  private async runWithRetry(args: string[], attempts = 6): Promise<string> {
+    // The gateway's per-scope token warms up lazily: the first 1-2 evals after a
+    // fresh container reliably 502 with model_denied, then it works (observed in a
+    // known-good claude-code run: 2 denied dev evals, then 1.0/0.5). Failed evals
+    // are not charged, so we retry generously (~4 min total) to clear the warmup.
     let lastErr: any;
     for (let i = 0; i < attempts; i++) {
       try {
@@ -116,7 +120,7 @@ export class Evals {
         const msg = String(e?.message || e);
         if (/No such option|Usage:|invalid evaluation request/i.test(msg)) throw e; // deterministic, don't retry
         if (i < attempts - 1) {
-          const waitMs = (i + 1) * 15000;
+          const waitMs = Math.min((i + 1) * 25000, 60000);
           process.stderr.write(`[evals] run failed (attempt ${i + 1}/${attempts}): ${msg.slice(0, 160)} — retry in ${waitMs / 1000}s\n`);
           await new Promise((r) => setTimeout(r, waitMs));
         }
