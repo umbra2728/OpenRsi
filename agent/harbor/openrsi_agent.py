@@ -82,14 +82,18 @@ class OpenRsi(BaseInstalledAgent):
         if not self.model_name:
             raise ValueError("model_name is required (the optimizer model)")
 
-        # Forward the producer-scope gateway + all OPENRSI_* knobs. The gateway is
-        # OpenAI-compatible (same path codex uses); OpenRSI's provider builds the
-        # optimizer model against OPENAI_BASE_URL/OPENAI_API_KEY.
+        # Route model calls through the metered gateway, NOT the host upstream.
+        # Harbor injects the compose-internal gateway base_url + a producer-scope
+        # token into the AGENT env; codex reads them via self._get_env, so we do
+        # the same. Reading os.environ here would leak the host's OpenRouter creds
+        # into the container and bypass metering (conformance step 1 fails).
         env: dict[str, str] = {"OPENRSI_OPTIMIZER_MODEL": self.model_name, "OPENRSI_PROVIDER": "openai"}
         for key in ("OPENAI_BASE_URL", "OPENAI_API_KEY"):
-            val = os.environ.get(key)
+            val = self._get_env(key)
             if val:
                 env[key] = val
+        # OPENRSI_* knobs are our own config (generations, subset sizes, git ref) —
+        # those legitimately come from the host process env.
         for key, val in os.environ.items():
             if key.startswith("OPENRSI_"):
                 env[key] = val
