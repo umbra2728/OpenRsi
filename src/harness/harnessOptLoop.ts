@@ -229,15 +229,20 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
     }
   }
 
-  // Final confirmation on validation (aggregate), then deliberate submit.
+  // Final confirmation on validation (aggregate). Validation enforces a
+  // k-anonymity floor (default 5): a smaller subset is DENIED ("evaluation
+  // denied"), so request at least the floor, and skip the confirmation if the
+  // partition itself is smaller than the floor.
   await resetTo(targetDir, championSha);
   let championVal: number | null = null;
-  try {
-    const stop = Math.min(val.cases ?? cfg.reserveValCases, cfg.reserveValCases);
-    championVal = (await evals.evaluate(val, { start: 0, stop })).score;
-    log(`champion validation(${stop})=${fmt(championVal)}`);
-  } catch (e: any) {
-    log(`validation confirm failed: ${e?.message || e}`);
+  const valFloor = Number(process.env.OPENRSI_MIN_VAL_CASES || 5);
+  const valStop = Math.min(val.cases ?? Number.MAX_SAFE_INTEGER, Math.max(cfg.reserveValCases, valFloor));
+  if ((val.cases ?? 0) >= valFloor) {
+    const vr = await evals.evaluate(val, { start: 0, stop: valStop });
+    championVal = vr.score;
+    log(`champion validation(${valStop})=${fmt(championVal)}${vr.error ? ` (err: ${vr.error.slice(0, 120)})` : ""}`);
+  } else {
+    log(`skip validation confirm: partition has ${val.cases} cases < k-anon floor ${valFloor}`);
   }
   logEvent("validation", { score: championVal });
   await evals.submit(championSha).then(
