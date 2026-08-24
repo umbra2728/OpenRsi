@@ -34,9 +34,12 @@ RESCUE="$(find "$SRC" -name 'session-rescue.tar.gz' 2>/dev/null | head -1 || tru
 [ -n "$SESS" ] && cp "$SESS" "$OUT/" || true
 [ -n "$RESCUE" ] && cp "$RESCUE" "$OUT/" || true
 
-# extract the analysis-critical files out of whichever archive has them
+# Extract rescue first, then the completed session. Both archives use the same
+# `session/` paths; extracting rescue last used to overwrite the complete
+# database with a search-only snapshot and silently drop the held-out test
+# evaluation. The completed session is authoritative whenever it exists.
 TMP="$(mktemp -d)"
-for A in "$SESS" "$RESCUE"; do
+for A in "$RESCUE" "$SESS"; do
   [ -n "$A" ] || continue
   tar xzf "$A" -C "$TMP" 2>/dev/null || true
 done
