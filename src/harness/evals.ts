@@ -95,8 +95,34 @@ export class Evals {
     if (subset?.start != null) args.push("--start", String(subset.start));
     if (subset?.stop != null) args.push("--stop", String(subset.stop));
     for (const id of subset?.caseIds ?? []) args.push("--case-id", id);
-    const raw = await this.exec(args);
+    const raw = await this.runWithRetry(args);
     return this.readNewestResult(entry.partition, raw);
+  }
+
+  /**
+   * `evals run`, resilient to TRANSIENT eval failures. The gateway occasionally
+   * returns a 502 / model_denied while a scope token is warming up (observed: a
+   * clean run still logs a few such hiccups and passes). We retry a couple of
+   * times with backoff — but never retry a client-side usage error (bad flags),
+   * and cap attempts so we don't burn the case-pass budget.
+   */
+  private async runWithRetry(args: string[], attempts = 3): Promise<string> {
+    let lastErr: any;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        return await this.exec(args);
+      } catch (e: any) {
+        lastErr = e;
+        const msg = String(e?.message || e);
+        if (/No such option|Usage:|invalid evaluation request/i.test(msg)) throw e; // deterministic, don't retry
+        if (i < attempts - 1) {
+          const waitMs = (i + 1) * 15000;
+          process.stderr.write(`[evals] run failed (attempt ${i + 1}/${attempts}): ${msg.slice(0, 160)} — retry in ${waitMs / 1000}s\n`);
+          await new Promise((r) => setTimeout(r, waitMs));
+        }
+      }
+    }
+    throw lastErr;
   }
 
   /** Nominate a commit as the shipped candidate H+. Deliberate; never rely on auto-best. */
