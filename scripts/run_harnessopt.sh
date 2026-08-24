@@ -16,6 +16,13 @@ OPT_MODEL="${2:?optimizer model id, e.g. openai/gpt-5.6-sol}"
 GO="${3:-}"
 
 HARNESSOPT="${HARNESSOPT:-/mnt/storage/harnessopt}"
+ENV_SH="${HARNESSOPT_ENV:-$HARNESSOPT/env.sh}"
+# env.sh puts the storage-local uv/uvx toolchain on PATH. VeRO invokes uvx
+# internally after compiling the Harbor task, so setting UV alone is insufficient.
+if [ -f "$ENV_SH" ]; then
+  # shellcheck disable=SC1090
+  source "$ENV_SH"
+fi
 VERO="${VERO:-$HARNESSOPT/vero/vero}"
 HEB="${HEB:-$HARNESSOPT/vero/harness-engineering-bench}"
 SECRETS="${SECRETS:-$HARNESSOPT/vero/openrouter.secrets.env}"
