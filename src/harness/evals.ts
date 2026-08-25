@@ -56,7 +56,9 @@ export class Evals {
   private bin: string;
   private cwd: string;
   private context: string;
-  private timeoutMs: number;
+  private perCaseMs: number;
+  private evalFloorMs: number;
+  private evalCeilMs: number;
 
   constructor(
     opts: {
@@ -68,18 +70,38 @@ export class Evals {
   ) {
     this.bin = opts.bin ?? "evals";
     this.cwd = opts.cwd ?? process.cwd();
-    this.timeoutMs = opts.timeoutMs ?? 60 * 60 * 1000; // 60 min; a real eval can take many minutes
+    // The `evals` subprocess wall MUST exceed the sidecar's own per-evaluation
+    // budget, or the client kills a still-running eval before the server would.
+    // A fixed 60-min cap shipped the seed on Terminal-Bench: an 18-case validation
+    // pass (one slow case can run ~65 min) blew the client cap while the sidecar
+    // still allowed up to 2 h. Scale the wall with the case count and keep a floor
+    // above the server budget.
+    const envNum = (n: string): number | null => {
+      const v = process.env[n];
+      const x = v == null ? NaN : Number(v);
+      return Number.isFinite(x) && x > 0 ? x : null;
+    };
+    this.perCaseMs = envNum("OPENRSI_EVAL_PER_CASE_MS") ?? 20 * 60 * 1000; // 20 min/case
+    this.evalFloorMs = envNum("OPENRSI_EVAL_FLOOR_MS") ?? 3 * 60 * 60 * 1000; // 3 h floor (> sidecar per-eval budget)
+    this.evalCeilMs =
+      opts.timeoutMs ?? envNum("OPENRSI_EVAL_TIMEOUT_MS") ?? 8 * 60 * 60 * 1000; // 8 h hard ceiling
     this.context = opts.context ?? resolveContext(this.cwd);
+  }
+
+  /** Subprocess wall for an eval of `nCases`, clamped above the sidecar budget. */
+  private callTimeoutMs(nCases: number): number {
+    const scaled = Math.max(1, nCases) * this.perCaseMs;
+    return Math.min(this.evalCeilMs, Math.max(this.evalFloorMs, scaled));
   }
 
   get contextDir(): string {
     return this.context;
   }
 
-  private async exec(args: string[]): Promise<string> {
+  private async exec(args: string[], timeoutMs?: number): Promise<string> {
     const { stdout } = await pexec(this.bin, args, {
       cwd: this.cwd,
-      timeout: this.timeoutMs,
+      timeout: timeoutMs ?? this.evalCeilMs,
       maxBuffer: 64 * 1024 * 1024,
     });
     return stdout;
@@ -137,6 +159,16 @@ export class Evals {
     if (subset?.stop != null) args.push("--stop", String(subset.stop));
     for (const id of subset?.caseIds ?? []) args.push("--case-id", id);
 
+    // Size the subprocess wall to how many cases this call scores, so a large
+    // (slow) validation panel is not killed by a fixed client cap below the
+    // sidecar's own per-evaluation budget.
+    const nCases =
+      subset?.caseIds?.length ??
+      (subset?.start != null && subset?.stop != null
+        ? subset.stop - subset.start
+        : (entry.cases ?? 8));
+    const callTimeout = this.callTimeoutMs(nCases);
+
     const t0 = Date.now();
     // `stage` is the declared protocol stage this evaluation belongs to (seed,
     // screen, recheck, val-select, val-confirm). It is stamped on every
@@ -150,10 +182,11 @@ export class Evals {
       partition: entry.partition,
       subset: subset ?? null,
       args,
+      timeoutMs: callTimeout,
     });
     let raw: string;
     try {
-      raw = await this.runTransientRetry(args);
+      raw = await this.runTransientRetry(args, callTimeout);
     } catch (e: any) {
       // The eval RAN but the target failed (e.g. 502 "evaluation failed" wrapping a
       // model_denied), or infra gave up. Record it, and enrich with the per-case
@@ -201,12 +234,13 @@ export class Evals {
   /** Retry ONLY transient infra errors; a deterministic eval failure is returned, not retried. */
   private async runTransientRetry(
     args: string[],
+    timeoutMs?: number,
     attempts = 2,
   ): Promise<string> {
     let lastErr: any;
     for (let i = 0; i < attempts; i++) {
       try {
-        return await this.exec(args);
+        return await this.exec(args, timeoutMs);
       } catch (e: any) {
         lastErr = e;
         const msg = String(e?.message || e);
