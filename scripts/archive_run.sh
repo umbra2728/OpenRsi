@@ -57,8 +57,9 @@ rm -rf "$TMP"
   echo "archived=$TS"
   echo "source=$SRC"
   echo "reward=$(cat "$OUT/reward.json" 2>/dev/null | tr -d '[:space:]')"
-  echo "files:"; ls -la "$OUT" | sed 's/^/  /'
-} > "$OUT/MANIFEST.txt"
+  echo "files:"
+  ls -la "$OUT" | sed 's/^/  /'
+} >"$OUT/MANIFEST.txt"
 
 echo "archived -> $OUT"
 ls -la "$OUT"

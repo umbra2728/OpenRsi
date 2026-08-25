@@ -9,6 +9,13 @@
 #   OPENRSI_GIT_URL=https://github.com/umbra2728/OpenRsi.git \
 #   OPENRSI_GIT_REF=<immutable-commit-sha> \
 #   scripts/run_harnessopt.sh gaia openai/gpt-5.6-sol --go
+#
+# Build-config selection (paper-shaped grid): the GAIA cell must use the
+# non-functional SHELL seed (baseline 0), not the working stateful Responses
+# seed. Point at it without editing canonical YAML via either:
+#   OPENRSI_BUILD_CONFIG=<abs-or-HEB-relative path to a build.yaml>
+#   OPENRSI_BUILD_VARIANT=shell   # resolves <task>/baseline/build.shell.yaml
+# Default remains <task>/baseline/build.yaml so existing calls are unchanged.
 set -euo pipefail
 
 TASK="${1:?usage: run_harnessopt.sh <task> <optimizer-model> [--go]}"
@@ -31,12 +38,33 @@ RESULTS="${OPENRSI_RESULTS:-$HARNESSOPT/results}"
 LIVE_ROOT="${OPENRSI_LIVE_ROOT:-$HARNESSOPT/live}"
 TS="$(date +%Y%m%d-%H%M%S)"
 MODEL_LABEL="$(printf '%s' "$OPT_MODEL" | tr '/:' '__')"
-LABEL="${OPENRSI_RUN_LABEL:-${TASK}__${MODEL_LABEL}__${TS}}"
+
+# Resolve the build config. Priority: explicit OPENRSI_BUILD_CONFIG, then a named
+# OPENRSI_BUILD_VARIANT (e.g. shell -> build.shell.yaml), then the canonical file.
+if [ -n "${OPENRSI_BUILD_CONFIG:-}" ]; then
+  case "$OPENRSI_BUILD_CONFIG" in
+    /*) BUILD="$OPENRSI_BUILD_CONFIG" ;;
+    *)  BUILD="$HEB/$OPENRSI_BUILD_CONFIG" ;;
+  esac
+elif [ -n "${OPENRSI_BUILD_VARIANT:-}" ]; then
+  BUILD="$HEB/$TASK/baseline/build.${OPENRSI_BUILD_VARIANT}.yaml"
+else
+  BUILD="$HEB/$TASK/baseline/build.yaml"
+fi
+BUILD_BASE="$(basename "$BUILD" .yaml)"
+# Distinguish variant runs in the label so a shell-seed run never collides with a
+# working-seed run in results/ (e.g. gaia__build.shell__gpt-5.6-sol__<ts>).
+if [ "$BUILD_BASE" = "build" ]; then
+  CFG_TAG=""
+else
+  CFG_TAG="$(printf '%s' "$BUILD_BASE" | sed 's/^build\.//')__"
+fi
+LABEL="${OPENRSI_RUN_LABEL:-${TASK}__${CFG_TAG}${MODEL_LABEL}__${TS}}"
 LIVE="${OPENRSI_LIVE_DIR:-$LIVE_ROOT/$LABEL}"
-BUILD="$HEB/$TASK/baseline/build.yaml"
 
 [ -f "$BUILD" ] || {
-  echo "no build.yaml for task '$TASK' at $BUILD" >&2
+  echo "no build config for task '$TASK' at $BUILD" >&2
+  echo "  (set OPENRSI_BUILD_CONFIG or OPENRSI_BUILD_VARIANT to override)" >&2
   exit 1
 }
 [ -f "$SECRETS" ] || {
@@ -71,6 +99,8 @@ echo "task=$TASK"
 echo "optimizer=$OPT_MODEL"
 echo "target(pinned)=$(grep -E '^model:' "$BUILD" | head -1)"
 echo "build=$BUILD"
+echo "build_sha256=$( (sha256sum "$BUILD" 2>/dev/null || shasum -a 256 "$BUILD") | awk '{print $1}')"
+echo "baseline_reward(pinned)=$(grep -E '^\s*baseline_reward:' "$BUILD" | head -1 | sed 's/^[[:space:]]*//')"
 echo "live=$LIVE"
 echo "results=$RESULTS"
 echo "OPENRSI_GIT_URL=$OPENRSI_GIT_URL"
@@ -89,16 +119,23 @@ mkdir -p "$LIVE_ROOT" "$RESULTS"
 rm -rf "$LIVE"
 mkdir -p "$LIVE"
 cp "$BUILD" "$LIVE/build.used.yaml"
+BUILD_SHA="$( (sha256sum "$BUILD" 2>/dev/null || shasum -a 256 "$BUILD") | awk '{print $1}')"
 {
   echo "label=$LABEL"
   echo "started=$(date -Is)"
   echo "task=$TASK"
   echo "optimizer_model=$OPT_MODEL"
+  echo "build_config=$BUILD"
+  echo "build_config_basename=$BUILD_BASE"
+  echo "build_config_sha256=$BUILD_SHA"
   echo "openrsi_git_url=$OPENRSI_GIT_URL"
   echo "openrsi_git_ref=$OPENRSI_GIT_REF"
   echo "generations=${OPENRSI_GENERATIONS:-6}"
   echo "dev_subset=${OPENRSI_DEV_SUBSET:-8}"
   echo "reserve_val=${OPENRSI_RESERVE_VAL:-8}"
+  echo "finalists=${OPENRSI_FINALISTS:-3}"
+  echo "val_select_cases=${OPENRSI_VAL_SELECT_CASES:-auto}"
+  echo "val_confirm_cases=${OPENRSI_VAL_CONFIRM_CASES:-auto}"
 } >"$LIVE/launch.env"
 
 archive_once() {

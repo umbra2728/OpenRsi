@@ -16,7 +16,14 @@
  *   OPENRSI_TARGET_DIR        default /work/agent
  *   OPENRSI_GENERATIONS       default 6
  *   OPENRSI_DEV_SUBSET        dev cases per iteration (default 8)
- *   OPENRSI_RESERVE_VAL       val cases for the final confirmation (default 8)
+ *   OPENRSI_RESERVE_VAL       min val cases for the confirmation panel (default 8)
+ *   OPENRSI_FINALISTS         distinct finalists carried to validation (default 3)
+ *   OPENRSI_VAL_SELECT_CASES  selection-panel size (auto when unset)
+ *   OPENRSI_VAL_CONFIRM_CASES confirmation-panel size (auto when unset)
+ *   OPENRSI_CONFIRM_ATTEMPTS  repeats per artifact on confirmation (default 2)
+ *   OPENRSI_CONFIRM_MARGIN    winner must beat seed by > this on confirm (default 0)
+ *   OPENRSI_MIN_VAL_CASES     k-anonymity floor per validation panel (default 5)
+ *   OPENRSI_PAIRED_RECHECK    re-check a marginal dev win (default on; "off" disables)
  */
 import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
 import type { Model } from "@earendil-works/pi-ai";
@@ -38,6 +45,9 @@ import { logEvent } from "./harness/log.js";
  */
 function buildOptimizerModel(): Model<any> {
   const id = process.env.OPENRSI_OPTIMIZER_MODEL?.trim() || "anthropic/claude-opus-5";
+  // SAFETY: getBuiltinModel's exported type is wider than the (provider, id) form
+  // we use; the pi-ai catalog resolves "openai"/"gpt-4o" to a base Model we then
+  // clone. TypeScript can't narrow the overload here, so we assert the call shape.
   const factory = getBuiltinModel as unknown as (p: string, id: string) => Model<any> | null;
   const base = factory("openai", "gpt-4o");
   if (!base) throw new Error("cannot build base openai model for the gateway");
@@ -95,6 +105,12 @@ async function main() {
   const { dev, val } = pickEvals(plan);
   log(`iterate on ${dev.partition} (${dev.backend}); select on ${val.partition} (${val.backend}); model=${process.env.OPENRSI_OPTIMIZER_MODEL}`);
 
+  const envNum = (name: string): number | null => {
+    const v = process.env[name];
+    if (v == null || v.trim() === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
   const cfg: LoopConfig = {
     targetDir,
     evals,
@@ -105,10 +121,20 @@ async function main() {
     devSubset: Math.min(Number(process.env.OPENRSI_DEV_SUBSET || 8), dev.cases ?? Number(process.env.OPENRSI_DEV_SUBSET || 8)),
     reserveValCases: Number(process.env.OPENRSI_RESERVE_VAL || 8),
     thinkingLevel: (process.env.OPENRSI_THINKING as any) || "medium",
+    finalists: envNum("OPENRSI_FINALISTS") ?? 3,
+    valSelectCases: envNum("OPENRSI_VAL_SELECT_CASES"),
+    valConfirmCases: envNum("OPENRSI_VAL_CONFIRM_CASES"),
+    confirmAttempts: envNum("OPENRSI_CONFIRM_ATTEMPTS") ?? 2,
+    confirmMargin: envNum("OPENRSI_CONFIRM_MARGIN") ?? 0,
+    minValCases: envNum("OPENRSI_MIN_VAL_CASES") ?? 5,
+    pairedRecheck: (process.env.OPENRSI_PAIRED_RECHECK ?? "on").toLowerCase() !== "off",
     log,
   };
   const res = await runLoop(cfg);
-  log(`DONE champion=${res.championSha.slice(0, 8)} baseline=${res.baselineDev} dev=${res.championDev} val=${res.championVal} accepted=${res.accepted}/${res.generations}`);
+  const conf = res.confirmation
+    ? `confirm(seed=${res.confirmation.seed} winner=${res.confirmation.winner} ${res.confirmation.passed ? "PASS" : "FAIL"})`
+    : "confirm(n/a)";
+  log(`DONE nominee=${res.nomineeSha.slice(0, 8)}${res.nomineeIsSeed ? "(SEED)" : ""} baseline=${res.baselineDev} dev=${res.championDev} finalists=${res.finalists.length} ${conf} accepted=${res.accepted}/${res.generations}`);
   process.exit(0);
 }
 

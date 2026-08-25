@@ -1,0 +1,9 @@
+{
+  "route": "openrouter",
+  "wandb_suffix": "openrouter",
+  "_comment": "Target is fireworks_ai/deepseek-v4-flash in the canonical build. Fill with the exact single-provider OpenRouter DeepSeek-v4-flash slug after routes/probe_route.py (Stage 1). Identity default = route-labelled copy with the seed re-measured.",
+  "aliases": {
+    "fireworks_ai/deepseek-v4-flash": "fireworks_ai/deepseek-v4-flash"
+  },
+  "baseline_reward": null
+}

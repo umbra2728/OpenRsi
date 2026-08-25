@@ -76,7 +76,15 @@ export class Evals {
   /** The evaluations the optimizer may run, with per-partition backend + budget. */
   plan(): PlanEntry[] {
     const p = join(this.context, "plan.json");
-    const doc = JSON.parse(readFileSync(p, "utf8"));
+    let doc: any;
+    try {
+      doc = JSON.parse(readFileSync(p, "utf8"));
+    } catch (e: any) {
+      // plan.json is written by the sidecar and is required to know what may be
+      // evaluated; a missing/corrupt plan is a hard setup error, surfaced clearly
+      // rather than as a raw parser stack.
+      throw new Error(`cannot read evaluation plan at ${p}: ${e?.message || e}`);
+    }
     return (doc.evaluations ?? []).map((e: any) => ({
       name: e.name,
       partition: e.partition,
@@ -100,6 +108,7 @@ export class Evals {
   async evaluate(
     entry: PlanEntry,
     subset?: { start?: number; stop?: number; caseIds?: string[] },
+    stage?: string,
   ): Promise<EvalResult> {
     const args = ["run", "--backend", entry.backend, "--evaluation-set", entry.name, "--partition", entry.partition];
     if (subset?.start != null) args.push("--start", String(subset.start));
@@ -107,7 +116,12 @@ export class Evals {
     for (const id of subset?.caseIds ?? []) args.push("--case-id", id);
 
     const t0 = Date.now();
-    logEvent("eval.run", { backend: entry.backend, evalSet: entry.name, partition: entry.partition, subset: subset ?? null, args });
+    // `stage` is the declared protocol stage this evaluation belongs to (seed,
+    // screen, recheck, val-select, val-confirm). It is stamped on every
+    // eval.run/eval.result record so a post-run audit can reconcile the sidecar
+    // database (the canonical ledger) against OpenRSI's declared intent and fail
+    // if any evaluation cannot be mapped to a stage.
+    logEvent("eval.run", { stage: stage ?? null, backend: entry.backend, evalSet: entry.name, partition: entry.partition, subset: subset ?? null, args });
     let raw: string;
     try {
       raw = await this.runTransientRetry(args);
@@ -119,11 +133,11 @@ export class Evals {
       const recorded = this.readNewestResult(entry.partition, cliErr, true);
       const perCase = recorded.cases.map((c) => c.error).filter(Boolean).slice(0, 4).join(" | ");
       const res = { ...recorded, score: null, error: perCase ? `${cliErr}\nroot cause: ${perCase}` : cliErr };
-      logEvent("eval.result", { partition: entry.partition, ok: false, score: null, numCases: res.numCases, durationMs: Date.now() - t0, error: res.error, cases: res.cases });
+      logEvent("eval.result", { stage: stage ?? null, partition: entry.partition, ok: false, score: null, numCases: res.numCases, durationMs: Date.now() - t0, evaluationId: res.evaluationId, error: res.error, cases: res.cases });
       return res;
     }
     const res = this.readNewestResult(entry.partition, raw);
-    logEvent("eval.result", { partition: entry.partition, ok: true, score: res.score, numCases: res.numCases, durationMs: Date.now() - t0, evaluationId: res.evaluationId, cases: res.cases, raw: raw.slice(-1200) });
+    logEvent("eval.result", { stage: stage ?? null, partition: entry.partition, ok: true, score: res.score, numCases: res.numCases, durationMs: Date.now() - t0, evaluationId: res.evaluationId, cases: res.cases, raw: raw.slice(-1200) });
     return res;
   }
 

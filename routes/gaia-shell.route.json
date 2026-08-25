@@ -1,0 +1,9 @@
+{
+  "route": "openrouter",
+  "wandb_suffix": "openrouter-shell",
+  "_comment": "GAIA SHELL cell (build.shell.yaml): non-functional seed, baseline 0 by construction. Exploratory only (test partition already inspected in R1). Target is gpt-5.4-mini; the candidate a functional agent must build MUST NOT rely on server-side previous_response_id (stateless route). Fill the exact single-provider gpt-5.4-mini OpenRouter slug after Stage-1 probe. baseline stays re-measured (expect ~0).",
+  "aliases": {
+    "gpt-5.4-mini": "gpt-5.4-mini"
+  },
+  "baseline_reward": null
+}
