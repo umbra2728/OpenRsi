@@ -52,6 +52,31 @@ export const LEVERS = [
   "retry / timeout policy",
 ] as const;
 
+/**
+ * Per-lever concrete guidance. These are GENERAL, mechanistically-justified harness
+ * improvements distilled from the benchmark's own seed fixes and the paper's gain
+ * analysis — not references to any held-out case. They steer a proposal toward the
+ * highest-yield version of its angle.
+ */
+export const LEVER_HINTS: Record<string, string> = {
+  "system prompt / instructions":
+    "State the exact output the grader expects and where it is read; demand the agent verify facts and finish with a single well-formed answer. Cut vague filler.",
+  "control loop & step cap":
+    "Give enough turns to finish hard cases but exit as soon as the answer is ready. On EVERY exit path (including budget-exhausted) force one final, correctly-formatted answer; never leave an empty/partial answer.",
+  "tool schema & tool surface":
+    "Make tool schemas precise and their outputs compact and easy to parse. Validate/parse tool arguments defensively and feed a clear error back instead of crashing.",
+  "context management (truncation, memory)":
+    "Truncate or summarize stale/huge tool output so later turns are not derailed or context-overflowed; keep the running transcript focused on what still matters.",
+  "retrieval / context selection":
+    "Retrieve/keep only the evidence a step needs; drop irrelevant chunks. Better selection beats more reading (trace-reading correlates negatively with gain).",
+  "answer extraction / output formatting":
+    "Normalize the final answer to the grader's exact expected format/path on every exit path; strip prose/labels/markdown the grader does not want.",
+  "reasoning effort / model params":
+    "Tune reasoning effort / max tokens to the task: enough to solve, not so much that cases time out (a timeout scores zero).",
+  "retry / timeout policy":
+    "Wrap model and tool calls in retry-with-backoff so one transient error never zeroes a case; bound per-call time so a slow call cannot blow the case wall-clock.",
+};
+
 export interface LoopConfig {
   targetDir: string; // /work/agent
   evals: Evals;
@@ -144,9 +169,23 @@ async function propose(
     "continuation. Use Chat Completions with full client-held history, or a stateless Responses",
     "call that replays the complete transcript every turn. A candidate that chains turns via a",
     "non-null `previous_response_id` will fail on this route.",
+    "",
+    "HIGH-YIELD, GENERAL HARNESS LEVERS (these produced the biggest gains on this benchmark and are",
+    "pure robustness/quality work — they never depend on any held-out case):",
+    "- ROBUSTNESS: never let one transient error or malformed tool argument kill a rollout — retry",
+    "  with backoff and feed tool errors back to the model. One unhandled exception zeroes the case.",
+    "- FINISH THE JOB: guarantee a well-formed final answer in the grader's exact expected format and",
+    "  location on EVERY exit path, including when the step budget is exhausted (forced final).",
+    "- STEP BUDGET & LATENCY: enough turns to finish hard cases, stop early when done; a slower agent",
+    "  can score worse by exceeding a case's wall-clock limit — timeouts score zero.",
+    "- CONTEXT DISCIPLINE: truncate/summarize stale or huge tool output so later turns are not",
+    "  derailed or truncated by context overflow.",
+    "- BREADTH WINS: the strongest predictor of gain here is trying several DISTINCT levers; prefer a",
+    "  concrete, mechanistically-justified change over re-touching something that already regressed.",
   ].join("\n");
   const userPrompt = [
     `# Improve the target agent (this round's angle: ${lever})`,
+    LEVER_HINTS[lever] ? `Focus for this angle: ${LEVER_HINTS[lever]}` : "",
     "",
     "## Current evaluation diagnostics",
     diagnostics ||
@@ -456,10 +495,7 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
     // re-credited below if it is accepted.
     for (const c of batchCands) {
       if (!better(c.score, championDev))
-        leverRegressions.set(
-          c.lever,
-          (leverRegressions.get(c.lever) ?? 0) + 1,
-        );
+        leverRegressions.set(c.lever, (leverRegressions.get(c.lever) ?? 0) + 1);
     }
     // Pick the best candidate of the batch (highest screen score).
     batchCands.sort((a, b) => num(b.score) - num(a.score));
@@ -826,19 +862,43 @@ function countByStage(ledger: LedgerEntry[]): Record<string, number> {
 function diagnose(r: EvalResult): string {
   if (r.error)
     return `The current agent's evaluation is FAILING (fix this first):\n${r.error}`;
-  const withErr = r.cases
-    .filter((c) => c.error)
-    .slice(0, 6)
-    .map((c) => `${c.caseId}: ${c.error}`);
-  if (withErr.length) return `Cases with errors:\n${withErr.join("\n")}`;
-  const low = r.cases
-    .filter((c) => (c.score ?? 0) <= 0)
-    .slice(0, 12)
+  const cases = r.cases ?? [];
+  const n = cases.length;
+  const scored = cases.filter((c) => typeof c.score === "number");
+  const mean = scored.length
+    ? scored.reduce((a, c) => a + (c.score ?? 0), 0) / scored.length
+    : null;
+  const zero = cases.filter((c) => (c.score ?? 0) <= 0);
+  // Cluster error signatures (first line) so a SYSTEMIC failure mode is obvious
+  // and a proposal can target the root cause rather than one-off symptoms.
+  const sig = new Map<string, number>();
+  for (const c of cases) {
+    if (!c.error) continue;
+    const key = String(c.error).split("\n")[0].trim().slice(0, 140);
+    if (key) sig.set(key, (sig.get(key) ?? 0) + 1);
+  }
+  const clusters = [...sig.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+  const lowIds = zero
     .map((c) => c.caseId)
-    .filter(Boolean);
-  return low.length
-    ? `Failing/low-scoring cases (sample): ${low.join(", ")}`
-    : "(agent runs; look for quality improvements)";
+    .filter(Boolean)
+    .slice(0, 12);
+  const parts: string[] = [
+    `Dev screen: ${n} cases, mean=${mean == null ? "n/a" : mean.toFixed(3)}, zero-score=${zero.length}.`,
+  ];
+  if (clusters.length)
+    parts.push(
+      "Most common error signatures (fix the shared root cause first):\n" +
+        clusters.map(([k, v]) => `- ${v}× ${k}`).join("\n"),
+    );
+  if (lowIds.length)
+    parts.push(`Zero/low-scoring cases to target: ${lowIds.join(", ")}`);
+  if (!clusters.length && !lowIds.length)
+    parts.push(
+      "(agent runs and scores; look for quality/robustness improvements)",
+    );
+  return parts.join("\n");
 }
 function fmt(n: number | null): string {
   return n == null ? "n/a" : n.toFixed(4);
