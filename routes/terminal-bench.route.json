@@ -1,9 +1,9 @@
 {
   "route": "openrouter",
   "wandb_suffix": "openrouter",
-  "_comment": "Fill exact single-provider OpenRouter slugs after routes/probe_route.py (Stage 1). Identity/empty aliases below are a SAFE default: the overlay is a route-labelled copy with the seed re-measured (baseline_reward null => score_baseline true). Caller keys are the models named in build.yaml allowed_models / top-level model. Target here is xai/grok-build-0.1; optimizer key must match --model.",
+  "_comment": "Caller model (canonical allowed_models) is 'xai/grok-build-0.1'; the real OpenRouter slug is 'x-ai/grok-build-0.1'. Probed 2026-08-25: provider=xAI (single provider, so naturally pinned). baseline null => re-measure K=3 on this route before any gain claim.",
   "aliases": {
-    "xai/grok-build-0.1": "xai/grok-build-0.1"
+    "xai/grok-build-0.1": "x-ai/grok-build-0.1"
   },
   "baseline_reward": null
 }

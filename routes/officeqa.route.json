@@ -1,9 +1,9 @@
 {
   "route": "openrouter",
   "wandb_suffix": "openrouter",
-  "_comment": "Target is fireworks_ai/deepseek-v4-flash in the canonical build. Fill with the exact single-provider OpenRouter DeepSeek-v4-flash slug after routes/probe_route.py (Stage 1). Identity default = route-labelled copy with the seed re-measured.",
+  "_comment": "Caller model is 'fireworks_ai/deepseek-v4-flash'; real OpenRouter slug is 'deepseek/deepseek-v4-flash'. Probed 2026-08-25: provider=Cloudflare (deepseek-v4-flash may have >1 provider on OpenRouter -- confirm single-provider with provider.only before treating as pinned; otherwise label OpenRouter-routed). baseline null => re-measure K=3.",
   "aliases": {
-    "fireworks_ai/deepseek-v4-flash": "fireworks_ai/deepseek-v4-flash"
+    "fireworks_ai/deepseek-v4-flash": "deepseek/deepseek-v4-flash"
   },
   "baseline_reward": null
 }

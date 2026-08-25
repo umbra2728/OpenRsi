@@ -1,9 +1,9 @@
 {
   "route": "openrouter",
   "wandb_suffix": "openrouter",
-  "_comment": "Candidate target is fireworks_ai/deepseek-v4-flash. The task-side ANSWER JUDGE is OpenAI gpt-4.1 and must stay on its fixed upstream route -- do NOT alias or move the judge here (that changes the verifier). Resolve the 830-vs-33/66/66 split provenance before repinning. Identity default = route-labelled copy, seed re-measured.",
+  "_comment": "Caller model is 'fireworks_ai/deepseek-v4-flash'; real OpenRouter slug is 'deepseek/deepseek-v4-flash' (probed 2026-08-25, provider=Cloudflare; confirm single-provider before treating as pinned). The task-side ANSWER JUDGE is OpenAI gpt-4.1 and MUST stay on its fixed upstream route -- do NOT alias/move the judge here. Resolve the 830-vs-33/66/66 split provenance before repinning. baseline null => re-measure K=3.",
   "aliases": {
-    "fireworks_ai/deepseek-v4-flash": "fireworks_ai/deepseek-v4-flash"
+    "fireworks_ai/deepseek-v4-flash": "deepseek/deepseek-v4-flash"
   },
   "baseline_reward": null
 }
