@@ -40,7 +40,12 @@ export interface PlanEntry {
 export interface EvalResult {
   score: number | null; // null = the evaluation itself failed (target errored / eval infra 502)
   numCases: number | null;
-  cases: Array<{ caseId: string; score: number | null; status?: string; error?: string }>;
+  cases: Array<{
+    caseId: string;
+    score: number | null;
+    status?: string;
+    error?: string;
+  }>;
   evaluationId: string | null;
   /** Present when the eval failed: the CLI error plus any per-case root cause (e.g. model_denied). */
   error?: string;
@@ -53,7 +58,14 @@ export class Evals {
   private context: string;
   private timeoutMs: number;
 
-  constructor(opts: { cwd?: string; bin?: string; timeoutMs?: number; context?: string } = {}) {
+  constructor(
+    opts: {
+      cwd?: string;
+      bin?: string;
+      timeoutMs?: number;
+      context?: string;
+    } = {},
+  ) {
     this.bin = opts.bin ?? "evals";
     this.cwd = opts.cwd ?? process.cwd();
     this.timeoutMs = opts.timeoutMs ?? 60 * 60 * 1000; // 60 min; a real eval can take many minutes
@@ -83,7 +95,9 @@ export class Evals {
       // plan.json is written by the sidecar and is required to know what may be
       // evaluated; a missing/corrupt plan is a hard setup error, surfaced clearly
       // rather than as a raw parser stack.
-      throw new Error(`cannot read evaluation plan at ${p}: ${e?.message || e}`);
+      throw new Error(
+        `cannot read evaluation plan at ${p}: ${e?.message || e}`,
+      );
     }
     return (doc.evaluations ?? []).map((e: any) => ({
       name: e.name,
@@ -110,7 +124,15 @@ export class Evals {
     subset?: { start?: number; stop?: number; caseIds?: string[] },
     stage?: string,
   ): Promise<EvalResult> {
-    const args = ["run", "--backend", entry.backend, "--evaluation-set", entry.name, "--partition", entry.partition];
+    const args = [
+      "run",
+      "--backend",
+      entry.backend,
+      "--evaluation-set",
+      entry.name,
+      "--partition",
+      entry.partition,
+    ];
     if (subset?.start != null) args.push("--start", String(subset.start));
     if (subset?.stop != null) args.push("--stop", String(subset.stop));
     for (const id of subset?.caseIds ?? []) args.push("--case-id", id);
@@ -121,7 +143,14 @@ export class Evals {
     // eval.run/eval.result record so a post-run audit can reconcile the sidecar
     // database (the canonical ledger) against OpenRSI's declared intent and fail
     // if any evaluation cannot be mapped to a stage.
-    logEvent("eval.run", { stage: stage ?? null, backend: entry.backend, evalSet: entry.name, partition: entry.partition, subset: subset ?? null, args });
+    logEvent("eval.run", {
+      stage: stage ?? null,
+      backend: entry.backend,
+      evalSet: entry.name,
+      partition: entry.partition,
+      subset: subset ?? null,
+      args,
+    });
     let raw: string;
     try {
       raw = await this.runTransientRetry(args);
@@ -131,18 +160,49 @@ export class Evals {
       // root cause from the persisted (failed) result so the proposer can act on it.
       const cliErr = String(e?.message || e).slice(0, 800);
       const recorded = this.readNewestResult(entry.partition, cliErr, true);
-      const perCase = recorded.cases.map((c) => c.error).filter(Boolean).slice(0, 4).join(" | ");
-      const res = { ...recorded, score: null, error: perCase ? `${cliErr}\nroot cause: ${perCase}` : cliErr };
-      logEvent("eval.result", { stage: stage ?? null, partition: entry.partition, ok: false, score: null, numCases: res.numCases, durationMs: Date.now() - t0, evaluationId: res.evaluationId, error: res.error, cases: res.cases });
+      const perCase = recorded.cases
+        .map((c) => c.error)
+        .filter(Boolean)
+        .slice(0, 4)
+        .join(" | ");
+      const res = {
+        ...recorded,
+        score: null,
+        error: perCase ? `${cliErr}\nroot cause: ${perCase}` : cliErr,
+      };
+      logEvent("eval.result", {
+        stage: stage ?? null,
+        partition: entry.partition,
+        ok: false,
+        score: null,
+        numCases: res.numCases,
+        durationMs: Date.now() - t0,
+        evaluationId: res.evaluationId,
+        error: res.error,
+        cases: res.cases,
+      });
       return res;
     }
     const res = this.readNewestResult(entry.partition, raw);
-    logEvent("eval.result", { stage: stage ?? null, partition: entry.partition, ok: true, score: res.score, numCases: res.numCases, durationMs: Date.now() - t0, evaluationId: res.evaluationId, cases: res.cases, raw: raw.slice(-1200) });
+    logEvent("eval.result", {
+      stage: stage ?? null,
+      partition: entry.partition,
+      ok: true,
+      score: res.score,
+      numCases: res.numCases,
+      durationMs: Date.now() - t0,
+      evaluationId: res.evaluationId,
+      cases: res.cases,
+      raw: raw.slice(-1200),
+    });
     return res;
   }
 
   /** Retry ONLY transient infra errors; a deterministic eval failure is returned, not retried. */
-  private async runTransientRetry(args: string[], attempts = 2): Promise<string> {
+  private async runTransientRetry(
+    args: string[],
+    attempts = 2,
+  ): Promise<string> {
     let lastErr: any;
     for (let i = 0; i < attempts; i++) {
       try {
@@ -150,9 +210,14 @@ export class Evals {
       } catch (e: any) {
         lastErr = e;
         const msg = String(e?.message || e);
-        const transient = /ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|EAI_AGAIN|network|timeout/i.test(msg);
+        const transient =
+          /ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|EAI_AGAIN|network|timeout/i.test(
+            msg,
+          );
         if (!transient || i === attempts - 1) throw e; // deterministic eval failure -> caller records it
-        process.stderr.write(`[evals] transient run error (attempt ${i + 1}/${attempts}): ${msg.slice(0, 120)} — retry in 10s\n`);
+        process.stderr.write(
+          `[evals] transient run error (attempt ${i + 1}/${attempts}): ${msg.slice(0, 120)} — retry in 10s\n`,
+        );
         await new Promise((r) => setTimeout(r, 10000));
       }
     }
@@ -169,27 +234,55 @@ export class Evals {
    * Also used after a FAILED eval to recover the per-case root cause; on a read
    * problem it returns an empty (null-score) result rather than throwing.
    */
-  private readNewestResult(partition: string, raw: string, failing = false): EvalResult {
-    const empty = (): EvalResult => ({ score: null, numCases: null, cases: [], evaluationId: null, raw, ...(failing ? { error: raw } : {}) });
+  private readNewestResult(
+    partition: string,
+    raw: string,
+    failing = false,
+  ): EvalResult {
+    const empty = (): EvalResult => ({
+      score: null,
+      numCases: null,
+      cases: [],
+      evaluationId: null,
+      raw,
+      ...(failing ? { error: raw } : {}),
+    });
     try {
       const idxPath = join(this.context, "results", "index.json");
       if (!existsSync(idxPath)) return empty();
       const idx = JSON.parse(readFileSync(idxPath, "utf8"));
-      const entries = (idx.evaluations ?? []).filter((e: any) => e.partition === partition);
+      const entries = (idx.evaluations ?? []).filter(
+        (e: any) => e.partition === partition,
+      );
       const entry = entries[entries.length - 1]; // sequential loop => newest is last appended
       if (!entry) return empty();
       const docPath = join(this.context, "results", String(entry.path));
       const doc = JSON.parse(readFileSync(docPath, "utf8"));
       const r = doc.result ?? {};
-      const score = firstNum(dig(r, "objective", "value"), dig(r, "metrics", "score"), dig(r, "report", "metrics", "score"));
+      const score = firstNum(
+        dig(r, "objective", "value"),
+        dig(r, "metrics", "score"),
+        dig(r, "report", "metrics", "score"),
+      );
       const caseFiles = Array.isArray(r.case_files) ? r.case_files : [];
       const cases = caseFiles.map((cf: any) => {
         try {
-          const cdoc = JSON.parse(readFileSync(join(dirname(docPath), String(cf.path)), "utf8"));
+          const cdoc = JSON.parse(
+            readFileSync(join(dirname(docPath), String(cf.path)), "utf8"),
+          );
           const c = cdoc.result ?? {};
           const errs = Array.isArray(c.errors) ? c.errors : [];
-          const error = errs[0]?.code ?? errs[0]?.message ?? dig(c, "output", "error_category") ?? dig(c, "output", "error");
-          return { caseId: String(c.case_id ?? ""), score: firstNum(dig(c, "metrics", "score")), status: c.status, error: error ? String(error).slice(0, 400) : undefined };
+          const error =
+            errs[0]?.code ??
+            errs[0]?.message ??
+            dig(c, "output", "error_category") ??
+            dig(c, "output", "error");
+          return {
+            caseId: String(c.case_id ?? ""),
+            score: firstNum(dig(c, "metrics", "score")),
+            status: c.status,
+            error: error ? String(error).slice(0, 400) : undefined,
+          };
         } catch {
           return { caseId: "", score: null };
         }
@@ -232,6 +325,7 @@ function dig(o: any, ...keys: string[]): any {
 
 /** First finite number among args (0 is valid; null/undefined skipped). */
 function firstNum(...vals: any[]): number | null {
-  for (const v of vals) if (typeof v === "number" && Number.isFinite(v)) return v;
+  for (const v of vals)
+    if (typeof v === "number" && Number.isFinite(v)) return v;
   return null;
 }

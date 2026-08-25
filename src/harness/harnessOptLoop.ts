@@ -25,7 +25,10 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
+import {
+  createAgentSession,
+  SessionManager,
+} from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
 import type { Evals, EvalResult, PlanEntry } from "./evals.js";
 import { logEvent } from "./log.js";
@@ -66,7 +69,10 @@ export interface LoopConfig {
 }
 
 async function git(cwd: string, ...args: string[]): Promise<string> {
-  const { stdout } = await pexec("git", args, { cwd, maxBuffer: 16 * 1024 * 1024 });
+  const { stdout } = await pexec("git", args, {
+    cwd,
+    maxBuffer: 16 * 1024 * 1024,
+  });
   return stdout.trim();
 }
 async function currentSha(cwd: string): Promise<string> {
@@ -75,10 +81,22 @@ async function currentSha(cwd: string): Promise<string> {
 async function commitAll(cwd: string, msg: string): Promise<string | null> {
   await git(cwd, "add", "-A");
   if (!(await git(cwd, "status", "--porcelain")).trim()) return null; // no edit produced
-  await pexec("git", ["-c", "user.name=openrsi", "-c", "user.email=openrsi@localhost", "commit", "-m", msg], {
-    cwd,
-    maxBuffer: 16 * 1024 * 1024,
-  });
+  await pexec(
+    "git",
+    [
+      "-c",
+      "user.name=openrsi",
+      "-c",
+      "user.email=openrsi@localhost",
+      "commit",
+      "-m",
+      msg,
+    ],
+    {
+      cwd,
+      maxBuffer: 16 * 1024 * 1024,
+    },
+  );
   return currentSha(cwd);
 }
 async function resetTo(cwd: string, sha: string): Promise<void> {
@@ -96,7 +114,11 @@ async function worktreeDiff(cwd: string): Promise<string> {
 }
 
 /** One think-first proposal: a pi coding-agent edits the target under one lever angle. */
-async function propose(cfg: LoopConfig, lever: string, diagnostics: string): Promise<void> {
+async function propose(
+  cfg: LoopConfig,
+  lever: string,
+  diagnostics: string,
+): Promise<void> {
   const systemPrompt = [
     "You are OpenRSI's harness-optimization proposer. You improve the Python code of a target",
     "agent so it scores higher on a HIDDEN held-out evaluation. Edit files under the current",
@@ -120,7 +142,8 @@ async function propose(cfg: LoopConfig, lever: string, diagnostics: string): Pro
     `# Improve the target agent (this round's angle: ${lever})`,
     "",
     "## Current evaluation diagnostics",
-    diagnostics || "(no diagnostics yet — read the code and the task resources first)",
+    diagnostics ||
+      "(no diagnostics yet — read the code and the task resources first)",
     "",
     "If the evaluation is FAILING (errors, not just low score), fixing that failure is the priority",
     "this round regardless of the angle above. Otherwise make ONE focused edit under the angle.",
@@ -147,7 +170,8 @@ async function propose(cfg: LoopConfig, lever: string, diagnostics: string): Pro
     // and the text at message.errorMessage — not as a thrown exception. Capture it.
     const stopReason = e?.message?.stopReason ?? e?.stopReason;
     const errText = e?.message?.errorMessage ?? e?.error ?? e?.errorMessage;
-    if (stopReason === "error" || stopReason === "aborted") modelErr = String(errText ?? stopReason).slice(0, 600);
+    if (stopReason === "error" || stopReason === "aborted")
+      modelErr = String(errText ?? stopReason).slice(0, 600);
     events.push({
       type,
       tool: e?.toolName ?? e?.name,
@@ -216,8 +240,17 @@ export interface LoopResult {
   nomineeIsSeed: boolean;
   championDev: number | null;
   finalists: Array<{ sha: string; devScore: number | null }>;
-  selection: Array<{ sha: string; score: number | null; isSeed: boolean }> | null;
-  confirmation: { seed: number | null; winner: number | null; winnerSha: string; passed: boolean } | null;
+  selection: Array<{
+    sha: string;
+    score: number | null;
+    isSeed: boolean;
+  }> | null;
+  confirmation: {
+    seed: number | null;
+    winner: number | null;
+    winnerSha: string;
+    passed: boolean;
+  } | null;
   accepted: number;
   generations: number;
 }
@@ -232,8 +265,22 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
   const oneCase = cfg.devSubset > 0 ? 1 / cfg.devSubset : 1; // a single-case screen flip
 
   const ledger: LedgerEntry[] = [];
-  const record = (stage: string, sha: string, entry: PlanEntry, subset: { start?: number; stop?: number } | null, r: EvalResult) => {
-    ledger.push({ stage, sha, partition: entry.partition, subset, score: r.score, evaluationId: r.evaluationId, error: r.error });
+  const record = (
+    stage: string,
+    sha: string,
+    entry: PlanEntry,
+    subset: { start?: number; stop?: number } | null,
+    r: EvalResult,
+  ) => {
+    ledger.push({
+      stage,
+      sha,
+      partition: entry.partition,
+      subset,
+      score: r.score,
+      evaluationId: r.evaluationId,
+      error: r.error,
+    });
   };
 
   const seedSha = await currentSha(targetDir);
@@ -242,16 +289,32 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
   // window (still an independent stochastic draw) when dev is too small.
   const devCases = dev.cases ?? cfg.devSubset;
   const recheckSlice =
-    devCases >= 2 * cfg.devSubset ? { start: cfg.devSubset, stop: 2 * cfg.devSubset } : { start: 0, stop: cfg.devSubset };
+    devCases >= 2 * cfg.devSubset
+      ? { start: cfg.devSubset, stop: 2 * cfg.devSubset }
+      : { start: 0, stop: cfg.devSubset };
 
   logEvent("loop.start", {
-    seedSha, dev, val, devSubset: cfg.devSubset, generations: cfg.generations,
-    finalistsCap, confirmAttempts, confirmMargin, valFloor, pairedRecheck,
+    seedSha,
+    dev,
+    val,
+    devSubset: cfg.devSubset,
+    generations: cfg.generations,
+    finalistsCap,
+    confirmAttempts,
+    confirmMargin,
+    valFloor,
+    pairedRecheck,
   });
   const baseline = await evals.evaluate(dev, devScreen, "seed-dev-screen");
   record("seed-dev-screen", seedSha, dev, devScreen, baseline);
-  log(`baseline dev(${cfg.devSubset}) score=${fmt(baseline.score)} cases=${baseline.numCases}${baseline.error ? ` FAILING: ${baseline.error.slice(0, 200)}` : ""}`);
-  logEvent("baseline", { score: baseline.score, error: baseline.error, cases: baseline.cases });
+  log(
+    `baseline dev(${cfg.devSubset}) score=${fmt(baseline.score)} cases=${baseline.numCases}${baseline.error ? ` FAILING: ${baseline.error.slice(0, 200)}` : ""}`,
+  );
+  logEvent("baseline", {
+    score: baseline.score,
+    error: baseline.error,
+    cases: baseline.cases,
+  });
 
   let championSha = seedSha;
   let championDev = baseline.score;
@@ -273,19 +336,32 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
     const devPlan = evals.plan().find((p) => p.partition === dev.partition);
     const needCases = cfg.devSubset * (pairedRecheck ? 2 : 1);
     if (devPlan?.remainingCases != null && devPlan.remainingCases < needCases) {
-      log(`gen${gen}: dev budget low (${devPlan.remainingCases} < ${needCases}) — stop`);
+      log(
+        `gen${gen}: dev budget low (${devPlan.remainingCases} < ${needCases}) — stop`,
+      );
       break;
     }
 
     const lever = LEVERS[(gen - 1) % LEVERS.length];
-    log(`gen${gen}: propose [${lever}] from champion ${championSha.slice(0, 8)}`);
-    logEvent("gen.start", { gen, lever, championSha, championDev, remainingDevCases: devPlan?.remainingCases ?? null });
+    log(
+      `gen${gen}: propose [${lever}] from champion ${championSha.slice(0, 8)}`,
+    );
+    logEvent("gen.start", {
+      gen,
+      lever,
+      championSha,
+      championDev,
+      remainingDevCases: devPlan?.remainingCases ?? null,
+    });
     await resetTo(targetDir, championSha);
     try {
       await propose(cfg, lever, diagnose(championResult));
     } catch (e: any) {
       log(`gen${gen}: proposer error: ${e?.message || e} — skip`);
-      logEvent("gen.proposer_error", { gen, error: String(e?.stack || e).slice(0, 600) });
+      logEvent("gen.proposer_error", {
+        gen,
+        error: String(e?.stack || e).slice(0, 600),
+      });
       await resetTo(targetDir, championSha);
       continue;
     }
@@ -301,15 +377,23 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
     const screenWon = better(cand.score, championDev);
     const margin = num(cand.score) - num(championDev);
     const marginal = screenWon && margin <= oneCase * 1.0001; // <= one case flip
-    log(`gen${gen}: candidate dev=${fmt(cand.score)} vs champ ${fmt(championDev)} (Δ=${margin.toFixed(4)}${marginal ? ", marginal" : ""})`);
+    log(
+      `gen${gen}: candidate dev=${fmt(cand.score)} vs champ ${fmt(championDev)} (Δ=${margin.toFixed(4)}${marginal ? ", marginal" : ""})`,
+    );
 
     let accept = screenWon;
     if (screenWon && marginal && pairedRecheck) {
       // Winner's-curse guard: re-evaluate BOTH champion and candidate on a fresh
       // dev slice and accept only if the candidate wins on the pooled two draws.
-      log(`gen${gen}: marginal win — paired re-check on dev[${recheckSlice.start},${recheckSlice.stop})`);
+      log(
+        `gen${gen}: marginal win — paired re-check on dev[${recheckSlice.start},${recheckSlice.stop})`,
+      );
       await resetTo(targetDir, championSha);
-      const champR = await evals.evaluate(dev, recheckSlice, "champ-dev-recheck");
+      const champR = await evals.evaluate(
+        dev,
+        recheckSlice,
+        "champ-dev-recheck",
+      );
       record("champ-dev-recheck", championSha, dev, recheckSlice, champR);
       await resetTo(targetDir, candSha);
       const candR = await evals.evaluate(dev, recheckSlice, "cand-dev-recheck");
@@ -317,18 +401,41 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
       const candPooled = num(cand.score) + num(candR.score);
       const champPooled = num(championDev) + num(champR.score);
       accept = candPooled > champPooled;
-      log(`gen${gen}: re-check champ=${fmt(champR.score)} cand=${fmt(candR.score)} → pooled ${candPooled.toFixed(4)} vs ${champPooled.toFixed(4)} → ${accept ? "confirm" : "reject"}`);
-      logEvent("gen.recheck", { gen, candSha, candScreen: cand.score, candRecheck: candR.score, champScreen: championDev, champRecheck: champR.score, accept });
+      log(
+        `gen${gen}: re-check champ=${fmt(champR.score)} cand=${fmt(candR.score)} → pooled ${candPooled.toFixed(4)} vs ${champPooled.toFixed(4)} → ${accept ? "confirm" : "reject"}`,
+      );
+      logEvent("gen.recheck", {
+        gen,
+        candSha,
+        candScreen: cand.score,
+        candRecheck: candR.score,
+        champScreen: championDev,
+        champRecheck: champR.score,
+        accept,
+      });
     }
 
-    logEvent("gen.decision", { gen, candSha, candScore: cand.score, championDev, marginal, accepted: accept });
+    logEvent("gen.decision", {
+      gen,
+      candSha,
+      candScore: cand.score,
+      championDev,
+      marginal,
+      accepted: accept,
+    });
     if (accept) {
       championSha = candSha;
       championDev = cand.score;
       championResult = cand;
       accepted++;
-      addFinalist({ sha: candSha, devScore: cand.score, label: `gen${gen} [${lever}]` });
-      log(`gen${gen}: ACCEPT (champion=${candSha.slice(0, 8)}, finalists=${finalists.length})`);
+      addFinalist({
+        sha: candSha,
+        devScore: cand.score,
+        label: `gen${gen} [${lever}]`,
+      });
+      log(
+        `gen${gen}: ACCEPT (champion=${candSha.slice(0, 8)}, finalists=${finalists.length})`,
+      );
     } else {
       await resetTo(targetDir, championSha);
       log(`gen${gen}: reject — keep champion ${championSha.slice(0, 8)}`);
@@ -343,10 +450,21 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
   const remainingVal = plan?.remainingCases ?? Number.MAX_SAFE_INTEGER;
 
   const panels = planValidationPanels({
-    valTotal, remainingVal, nFinalists: finalists.length, confirmAttempts, valFloor,
-    reserveValCases: cfg.reserveValCases, selCasesReq: cfg.valSelectCases ?? null, confCasesReq: cfg.valConfirmCases ?? null,
+    valTotal,
+    remainingVal,
+    nFinalists: finalists.length,
+    confirmAttempts,
+    valFloor,
+    reserveValCases: cfg.reserveValCases,
+    selCasesReq: cfg.valSelectCases ?? null,
+    confCasesReq: cfg.valConfirmCases ?? null,
   });
-  logEvent("validation.plan", { valTotal, remainingVal, finalists: finalists.map((f) => ({ sha: f.sha, devScore: f.devScore })), panels });
+  logEvent("validation.plan", {
+    valTotal,
+    remainingVal,
+    finalists: finalists.map((f) => ({ sha: f.sha, devScore: f.devScore })),
+    panels,
+  });
 
   let selection: LoopResult["selection"] = null;
   let confirmation: LoopResult["confirmation"] = null;
@@ -360,13 +478,16 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
       { sha: seedSha, isSeed: true, label: "seed" },
       ...finalists.map((f) => ({ sha: f.sha, isSeed: false, label: f.label })),
     ];
-    const sel: Array<{ sha: string; score: number | null; isSeed: boolean }> = [];
+    const sel: Array<{ sha: string; score: number | null; isSeed: boolean }> =
+      [];
     for (const c of contenders) {
       await resetTo(targetDir, c.sha);
       const r = await evals.evaluate(val, selSlice, "val-select");
       record("val-select", c.sha, val, selSlice, r);
       sel.push({ sha: c.sha, score: r.score, isSeed: c.isSeed });
-      log(`val-select(${selCases}) ${c.label} ${c.sha.slice(0, 8)} = ${fmt(r.score)}${r.error ? ` (err: ${r.error.slice(0, 100)})` : ""}`);
+      log(
+        `val-select(${selCases}) ${c.label} ${c.sha.slice(0, 8)} = ${fmt(r.score)}${r.error ? ` (err: ${r.error.slice(0, 100)})` : ""}`,
+      );
     }
     selection = sel;
 
@@ -377,47 +498,115 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
     for (const s of sel) {
       if (!s.isSeed && num(s.score) > num(winner.score)) winner = s;
     }
-    const winnerBeatsSeedOnSelect = !winner.isSeed && num(winner.score) > num(seedSel.score);
-    logEvent("validation.select", { winnerSha: winner.sha, winnerIsSeed: winner.isSeed, seedScore: seedSel.score, winnerScore: winner.score, winnerBeatsSeedOnSelect });
+    const winnerBeatsSeedOnSelect =
+      !winner.isSeed && num(winner.score) > num(seedSel.score);
+    logEvent("validation.select", {
+      winnerSha: winner.sha,
+      winnerIsSeed: winner.isSeed,
+      seedScore: seedSel.score,
+      winnerScore: winner.score,
+      winnerBeatsSeedOnSelect,
+    });
 
     if (!winnerBeatsSeedOnSelect) {
-      log(`val-select: no finalist beat the seed (${fmt(seedSel.score)}) — nominate SEED`);
+      log(
+        `val-select: no finalist beat the seed (${fmt(seedSel.score)}) — nominate SEED`,
+      );
       nomineeSha = seedSha;
     } else if (confCases <= 0) {
       // No room for a fresh confirmation panel: fall back to the selection winner
       // but flag it as unconfirmed.
-      log(`val-confirm: no fresh panel available — nominate selection winner ${winner.sha.slice(0, 8)} (UNCONFIRMED)`);
-      logEvent("validation.confirm_skipped", { reason: "no-confirmation-panel", winnerSha: winner.sha });
+      log(
+        `val-confirm: no fresh panel available — nominate selection winner ${winner.sha.slice(0, 8)} (UNCONFIRMED)`,
+      );
+      logEvent("validation.confirm_skipped", {
+        reason: "no-confirmation-panel",
+        winnerSha: winner.sha,
+      });
       nomineeSha = winner.sha;
     } else {
       // Confirm the winner against the seed on a FRESH, disjoint panel, averaging
       // `confirmAttempts` independent draws each.
       const confSlice = { start: selCases, stop: selCases + confCases };
-      const seedConf = await confirmMean(cfg, evals, seedSha, val, confSlice, confirmAttempts, "val-confirm-seed", record);
-      const winnerConf = await confirmMean(cfg, evals, winner.sha, val, confSlice, confirmAttempts, "val-confirm-winner", record);
+      const seedConf = await confirmMean(
+        cfg,
+        evals,
+        seedSha,
+        val,
+        confSlice,
+        confirmAttempts,
+        "val-confirm-seed",
+        record,
+      );
+      const winnerConf = await confirmMean(
+        cfg,
+        evals,
+        winner.sha,
+        val,
+        confSlice,
+        confirmAttempts,
+        "val-confirm-winner",
+        record,
+      );
       const passed = num(winnerConf) > num(seedConf) + confirmMargin;
-      confirmation = { seed: seedConf, winner: winnerConf, winnerSha: winner.sha, passed };
-      log(`val-confirm(${confCases}×${confirmAttempts}) seed=${fmt(seedConf)} winner=${fmt(winnerConf)} margin>${confirmMargin} → ${passed ? "PASS (nominate winner)" : "FAIL (nominate seed)"}`);
-      logEvent("validation.confirm", { seedConf, winnerConf, confirmMargin, passed, winnerSha: winner.sha });
+      confirmation = {
+        seed: seedConf,
+        winner: winnerConf,
+        winnerSha: winner.sha,
+        passed,
+      };
+      log(
+        `val-confirm(${confCases}×${confirmAttempts}) seed=${fmt(seedConf)} winner=${fmt(winnerConf)} margin>${confirmMargin} → ${passed ? "PASS (nominate winner)" : "FAIL (nominate seed)"}`,
+      );
+      logEvent("validation.confirm", {
+        seedConf,
+        winnerConf,
+        confirmMargin,
+        passed,
+        winnerSha: winner.sha,
+      });
       nomineeSha = passed ? winner.sha : seedSha;
     }
   } else {
-    log(`validation: cannot fit a k-anon panel (floor ${valFloor}, val ${valTotal}, remaining ${remainingVal}) — nominate SEED`);
-    logEvent("validation.skip", { reason: "insufficient-validation-budget", valTotal, remainingVal, valFloor });
+    log(
+      `validation: cannot fit a k-anon panel (floor ${valFloor}, val ${valTotal}, remaining ${remainingVal}) — nominate SEED`,
+    );
+    logEvent("validation.skip", {
+      reason: "insufficient-validation-budget",
+      valTotal,
+      remainingVal,
+      valFloor,
+    });
   }
 
   const nomineeIsSeed = nomineeSha === seedSha;
   await resetTo(targetDir, nomineeSha);
   await evals.submit(nomineeSha).then(
-    () => { log(`submitted nominee ${nomineeSha.slice(0, 8)}${nomineeIsSeed ? " (SEED)" : ""}`); logEvent("submit", { sha: nomineeSha, isSeed: nomineeIsSeed, ok: true }); },
-    (e) => { log(`submit failed: ${e?.message || e}`); logEvent("submit", { sha: nomineeSha, ok: false, error: String(e?.message || e) }); },
+    () => {
+      log(
+        `submitted nominee ${nomineeSha.slice(0, 8)}${nomineeIsSeed ? " (SEED)" : ""}`,
+      );
+      logEvent("submit", { sha: nomineeSha, isSeed: nomineeIsSeed, ok: true });
+    },
+    (e) => {
+      log(`submit failed: ${e?.message || e}`);
+      logEvent("submit", {
+        sha: nomineeSha,
+        ok: false,
+        error: String(e?.message || e),
+      });
+    },
   );
 
   // The reconciliation ledger: the sidecar DB is canonical, but this records the
   // STAGE OpenRSI intended for every evaluation it issued, so an audit can flag
   // any sidecar evaluation that OpenRSI cannot account for (e.g. a proposer that
   // launched `evals run` from its shell outside the loop).
-  logEvent("reconciliation", { total: ledger.length, byStage: countByStage(ledger), ledger });
+  logEvent("reconciliation", {
+    total: ledger.length,
+    byStage: countByStage(ledger),
+    ledger,
+  });
 
   const result: LoopResult = {
     baselineDev: baseline.score,
@@ -447,14 +636,21 @@ async function confirmMean(
   slice: { start: number; stop: number },
   attempts: number,
   stage: string,
-  record: (stage: string, sha: string, entry: PlanEntry, subset: { start?: number; stop?: number } | null, r: EvalResult) => void,
+  record: (
+    stage: string,
+    sha: string,
+    entry: PlanEntry,
+    subset: { start?: number; stop?: number } | null,
+    r: EvalResult,
+  ) => void,
 ): Promise<number | null> {
   await resetTo(cfg.targetDir, sha);
   const scores: number[] = [];
   for (let i = 0; i < attempts; i++) {
     const r = await evals.evaluate(entry, slice, `${stage}#${i + 1}`);
     record(`${stage}#${i + 1}`, sha, entry, slice, r);
-    if (typeof r.score === "number" && Number.isFinite(r.score)) scores.push(r.score);
+    if (typeof r.score === "number" && Number.isFinite(r.score))
+      scores.push(r.score);
   }
   if (!scores.length) return null;
   return scores.reduce((a, b) => a + b, 0) / scores.length;
@@ -477,7 +673,8 @@ export function planValidationPanels(opts: {
   selCasesReq: number | null;
   confCasesReq: number | null;
 }): { selCases: number; confCases: number } | null {
-  const { valTotal, remainingVal, nFinalists, confirmAttempts, valFloor } = opts;
+  const { valTotal, remainingVal, nFinalists, confirmAttempts, valFloor } =
+    opts;
   if (valTotal < valFloor) return null;
 
   const selContenders = nFinalists + 1; // seed + finalists
@@ -485,18 +682,28 @@ export function planValidationPanels(opts: {
 
   // Preferred selection panel: explicit request, else half the partition, but at
   // least the floor and at most valTotal - floor (leave room for confirmation).
-  let selCases = opts.selCasesReq ?? Math.max(valFloor, Math.min(half, valTotal - valFloor));
-  selCases = Math.max(valFloor, Math.min(selCases, valTotal - valFloor >= valFloor ? valTotal - valFloor : valTotal));
+  let selCases =
+    opts.selCasesReq ?? Math.max(valFloor, Math.min(half, valTotal - valFloor));
+  selCases = Math.max(
+    valFloor,
+    Math.min(
+      selCases,
+      valTotal - valFloor >= valFloor ? valTotal - valFloor : valTotal,
+    ),
+  );
 
   // Preferred confirmation panel: explicit request, else the remaining disjoint
   // cases, at least the reserve/floor.
   const reserve = Math.max(valFloor, opts.reserveValCases || 0);
-  let confCases = opts.confCasesReq ?? Math.max(reserve, Math.min(valTotal - selCases, half));
+  let confCases =
+    opts.confCasesReq ?? Math.max(reserve, Math.min(valTotal - selCases, half));
   confCases = Math.min(confCases, valTotal - selCases);
-  if (confCases < valFloor) confCases = valTotal - selCases >= valFloor ? valFloor : 0;
+  if (confCases < valFloor)
+    confCases = valTotal - selCases >= valFloor ? valFloor : 0;
 
   // Enforce the case-pass budget; shrink panels toward the floor if needed.
-  const passesNeeded = () => selContenders * selCases + confirmAttempts * 2 * confCases;
+  const passesNeeded = () =>
+    selContenders * selCases + confirmAttempts * 2 * confCases;
   let guard = 0;
   while (passesNeeded() > remainingVal && guard++ < 10000) {
     if (confCases > valFloor) confCases -= 1;
@@ -520,11 +727,21 @@ function countByStage(ledger: LedgerEntry[]): Record<string, number> {
 
 /** Diagnostics fed to the proposer: a hard failure (with root cause) takes priority over low cases. */
 function diagnose(r: EvalResult): string {
-  if (r.error) return `The current agent's evaluation is FAILING (fix this first):\n${r.error}`;
-  const withErr = r.cases.filter((c) => c.error).slice(0, 6).map((c) => `${c.caseId}: ${c.error}`);
+  if (r.error)
+    return `The current agent's evaluation is FAILING (fix this first):\n${r.error}`;
+  const withErr = r.cases
+    .filter((c) => c.error)
+    .slice(0, 6)
+    .map((c) => `${c.caseId}: ${c.error}`);
   if (withErr.length) return `Cases with errors:\n${withErr.join("\n")}`;
-  const low = r.cases.filter((c) => (c.score ?? 0) <= 0).slice(0, 12).map((c) => c.caseId).filter(Boolean);
-  return low.length ? `Failing/low-scoring cases (sample): ${low.join(", ")}` : "(agent runs; look for quality improvements)";
+  const low = r.cases
+    .filter((c) => (c.score ?? 0) <= 0)
+    .slice(0, 12)
+    .map((c) => c.caseId)
+    .filter(Boolean);
+  return low.length
+    ? `Failing/low-scoring cases (sample): ${low.join(", ")}`
+    : "(agent runs; look for quality improvements)";
 }
 function fmt(n: number | null): string {
   return n == null ? "n/a" : n.toFixed(4);

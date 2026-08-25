@@ -44,11 +44,15 @@ import { logEvent } from "./harness/log.js";
  * producer-scope token).
  */
 function buildOptimizerModel(): Model<any> {
-  const id = process.env.OPENRSI_OPTIMIZER_MODEL?.trim() || "anthropic/claude-opus-5";
+  const id =
+    process.env.OPENRSI_OPTIMIZER_MODEL?.trim() || "anthropic/claude-opus-5";
   // SAFETY: getBuiltinModel's exported type is wider than the (provider, id) form
   // we use; the pi-ai catalog resolves "openai"/"gpt-4o" to a base Model we then
   // clone. TypeScript can't narrow the overload here, so we assert the call shape.
-  const factory = getBuiltinModel as unknown as (p: string, id: string) => Model<any> | null;
+  const factory = getBuiltinModel as unknown as (
+    p: string,
+    id: string,
+  ) => Model<any> | null;
   const base = factory("openai", "gpt-4o");
   if (!base) throw new Error("cannot build base openai model for the gateway");
   const gatewayBaseUrl = process.env.OPENAI_BASE_URL?.trim();
@@ -62,7 +66,12 @@ function buildOptimizerModel(): Model<any> {
   } as Model<any>;
   const maxTok = Number(process.env.OPENRSI_MODEL_MAX_TOKENS || 0);
   if (maxTok > 0) (model as any).maxTokens = maxTok;
-  logEvent("model.built", { id, api: (model as any).api, baseUrl: (model as any).baseUrl, provider: (model as any).provider });
+  logEvent("model.built", {
+    id,
+    api: (model as any).api,
+    baseUrl: (model as any).baseUrl,
+    provider: (model as any).provider,
+  });
   return model;
 }
 
@@ -77,22 +86,31 @@ function pickEvals(plan: PlanEntry[]): { dev: PlanEntry; val: PlanEntry } {
     runnable.find((p) => p.disclosure === "aggregate") ??
     runnable.find((p) => p.partition === "validation") ??
     dev;
-  if (!dev || !val) throw new Error(`no runnable evaluations in plan: ${JSON.stringify(plan)}`);
+  if (!dev || !val)
+    throw new Error(`no runnable evaluations in plan: ${JSON.stringify(plan)}`);
   return { dev, val };
 }
 
 async function main() {
-  const instruction = process.argv.slice(2).join(" ") || process.env.OPENRSI_INSTRUCTION || "";
+  const instruction =
+    process.argv.slice(2).join(" ") || process.env.OPENRSI_INSTRUCTION || "";
   if (instruction === "--help" || instruction === "-h") {
-    process.stdout.write('usage: node dist/runHarnessOpt.js "<instruction.md text>"\n');
+    process.stdout.write(
+      'usage: node dist/runHarnessOpt.js "<instruction.md text>"\n',
+    );
     process.exit(0);
   }
   const targetDir = process.env.OPENRSI_TARGET_DIR?.trim() || "/work/agent";
-  const log = (m: string) => process.stderr.write(`[openrsi ${new Date().toISOString().slice(11, 19)}] ${m}\n`);
+  const log = (m: string) =>
+    process.stderr.write(
+      `[openrsi ${new Date().toISOString().slice(11, 19)}] ${m}\n`,
+    );
 
   const evals = new Evals({ cwd: targetDir });
   const plan = evals.plan();
-  log(`context=${evals.contextDir} plan=${plan.map((p) => `${p.partition}/${p.backend}(${p.disclosure},${p.cases})`).join(" ")}`);
+  log(
+    `context=${evals.contextDir} plan=${plan.map((p) => `${p.partition}/${p.backend}(${p.disclosure},${p.cases})`).join(" ")}`,
+  );
   logEvent("start", {
     context: evals.contextDir,
     optimizerModel: process.env.OPENRSI_OPTIMIZER_MODEL,
@@ -103,7 +121,9 @@ async function main() {
     plan,
   });
   const { dev, val } = pickEvals(plan);
-  log(`iterate on ${dev.partition} (${dev.backend}); select on ${val.partition} (${val.backend}); model=${process.env.OPENRSI_OPTIMIZER_MODEL}`);
+  log(
+    `iterate on ${dev.partition} (${dev.backend}); select on ${val.partition} (${val.backend}); model=${process.env.OPENRSI_OPTIMIZER_MODEL}`,
+  );
 
   const envNum = (name: string): number | null => {
     const v = process.env[name];
@@ -118,7 +138,10 @@ async function main() {
     val,
     model: buildOptimizerModel(),
     generations: Number(process.env.OPENRSI_GENERATIONS || 6),
-    devSubset: Math.min(Number(process.env.OPENRSI_DEV_SUBSET || 8), dev.cases ?? Number(process.env.OPENRSI_DEV_SUBSET || 8)),
+    devSubset: Math.min(
+      Number(process.env.OPENRSI_DEV_SUBSET || 8),
+      dev.cases ?? Number(process.env.OPENRSI_DEV_SUBSET || 8),
+    ),
     reserveValCases: Number(process.env.OPENRSI_RESERVE_VAL || 8),
     thinkingLevel: (process.env.OPENRSI_THINKING as any) || "medium",
     finalists: envNum("OPENRSI_FINALISTS") ?? 3,
@@ -127,14 +150,17 @@ async function main() {
     confirmAttempts: envNum("OPENRSI_CONFIRM_ATTEMPTS") ?? 2,
     confirmMargin: envNum("OPENRSI_CONFIRM_MARGIN") ?? 0,
     minValCases: envNum("OPENRSI_MIN_VAL_CASES") ?? 5,
-    pairedRecheck: (process.env.OPENRSI_PAIRED_RECHECK ?? "on").toLowerCase() !== "off",
+    pairedRecheck:
+      (process.env.OPENRSI_PAIRED_RECHECK ?? "on").toLowerCase() !== "off",
     log,
   };
   const res = await runLoop(cfg);
   const conf = res.confirmation
     ? `confirm(seed=${res.confirmation.seed} winner=${res.confirmation.winner} ${res.confirmation.passed ? "PASS" : "FAIL"})`
     : "confirm(n/a)";
-  log(`DONE nominee=${res.nomineeSha.slice(0, 8)}${res.nomineeIsSeed ? "(SEED)" : ""} baseline=${res.baselineDev} dev=${res.championDev} finalists=${res.finalists.length} ${conf} accepted=${res.accepted}/${res.generations}`);
+  log(
+    `DONE nominee=${res.nomineeSha.slice(0, 8)}${res.nomineeIsSeed ? "(SEED)" : ""} baseline=${res.baselineDev} dev=${res.championDev} finalists=${res.finalists.length} ${conf} accepted=${res.accepted}/${res.generations}`,
+  );
   process.exit(0);
 }
 
