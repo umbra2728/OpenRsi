@@ -35,16 +35,21 @@ import { logEvent } from "./log.js";
 
 const pexec = promisify(execFile);
 
-/** Harness levers used as diverse proposal angles (breadth correlates with gain). */
+/**
+ * Harness levers used as diverse proposal angles. The paper finds the fraction of
+ * levers TOUCHED during search is the single strongest gain correlate (ρ up to
+ * +0.88), so the loop pulls DISTINCT levers per generation (best-of-N) and
+ * schedules the historically high-yield ones first.
+ */
 export const LEVERS = [
   "system prompt / instructions",
   "control loop & step cap",
   "tool schema & tool surface",
-  "retry / timeout policy",
-  "answer extraction / output formatting",
-  "retrieval / context selection",
   "context management (truncation, memory)",
+  "retrieval / context selection",
+  "answer extraction / output formatting",
   "reasoning effort / model params",
+  "retry / timeout policy",
 ] as const;
 
 export interface LoopConfig {
@@ -54,6 +59,7 @@ export interface LoopConfig {
   val: PlanEntry; // validation (aggregate) — select + confirm here
   model: Model<any>;
   generations: number;
+  candidatesPerGen?: number; // best-of-N proposals screened per generation (default 2)
   devSubset: number; // dev cases per screen (a fixed window each time)
   reserveValCases: number; // legacy knob: min cases for the confirmation panel
   thinkingLevel?: "low" | "medium" | "high";
@@ -118,6 +124,7 @@ async function propose(
   cfg: LoopConfig,
   lever: string,
   diagnostics: string,
+  history: string = "",
 ): Promise<void> {
   const systemPrompt = [
     "You are OpenRSI's harness-optimization proposer. You improve the Python code of a target",
@@ -145,6 +152,7 @@ async function propose(
     diagnostics ||
       "(no diagnostics yet — read the code and the task resources first)",
     "",
+    history || "",
     "If the evaluation is FAILING (errors, not just low score), fixing that failure is the priority",
     "this round regardless of the angle above. Otherwise make ONE focused edit under the angle.",
     "Watch per-case latency: a slower agent can score worse by exceeding a case's wall-clock limit.",
@@ -330,63 +338,145 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
     if (finalists.length > finalistsCap) finalists.length = finalistsCap;
   };
 
+  // Lever scheduler: round-robin over LEVERS (high-yield first), retiring a lever
+  // that has regressed against the champion twice so budget is not re-spent on a
+  // persistent loser. Each generation pulls up to `candidatesPerGen` DISTINCT
+  // levers for a best-of-N batch.
+  const candidatesPerGen = Math.max(1, Math.floor(cfg.candidatesPerGen ?? 2));
+  const leverQueue: string[] = [...LEVERS];
+  const leverRegressions = new Map<string, number>();
+  const triedHistory: Array<{
+    gen: number;
+    lever: string;
+    delta: number | null;
+    accepted: boolean;
+  }> = [];
+  const nextLevers = (n: number): string[] => {
+    const out: string[] = [];
+    for (let scan = 0; scan < leverQueue.length && out.length < n; scan++) {
+      const lever = leverQueue.shift()!;
+      leverQueue.push(lever); // always cycle back (round-robin)
+      if ((leverRegressions.get(lever) ?? 0) < 2 && !out.includes(lever))
+        out.push(lever);
+    }
+    if (out.length === 0) out.push(leverQueue[0]); // never stall: reuse rotation
+    return out;
+  };
+  const historyText = (): string =>
+    triedHistory.length
+      ? "## Levers already tried (do NOT repeat a change that regressed)\n" +
+        triedHistory
+          .map(
+            (h) =>
+              `- ${h.lever}: Δ=${h.delta == null ? "n/a" : h.delta.toFixed(4)} ${h.accepted ? "(accepted)" : "(rejected)"}`,
+          )
+          .join("\n")
+      : "";
+
   for (let gen = 1; gen <= cfg.generations; gen++) {
-    // Stop proposing if the dev case-pass budget can't cover another screen
-    // (plus a possible paired re-check).
     const devPlan = evals.plan().find((p) => p.partition === dev.partition);
-    const needCases = cfg.devSubset * (pairedRecheck ? 2 : 1);
-    if (devPlan?.remainingCases != null && devPlan.remainingCases < needCases) {
-      log(
-        `gen${gen}: dev budget low (${devPlan.remainingCases} < ${needCases}) — stop`,
-      );
-      break;
+    const remaining = devPlan?.remainingCases ?? null;
+    // Fit the batch to the dev case-pass budget: reserve one possible paired
+    // re-check (2*devSubset) on top of `batch` screens (devSubset each).
+    const recheckCost = pairedRecheck ? 2 * cfg.devSubset : 0;
+    let batch = candidatesPerGen;
+    if (remaining != null) {
+      const affordable = Math.floor((remaining - recheckCost) / cfg.devSubset);
+      batch = Math.min(candidatesPerGen, Math.max(0, affordable));
+      if (batch < 1) {
+        if (remaining >= cfg.devSubset) {
+          batch = 1; // one bare screen still fits (no room for a re-check)
+        } else {
+          log(
+            `gen${gen}: dev budget low (${remaining} < ${cfg.devSubset}) — stop`,
+          );
+          break;
+        }
+      }
     }
 
-    const lever = LEVERS[(gen - 1) % LEVERS.length];
+    const levers = nextLevers(batch);
     log(
-      `gen${gen}: propose [${lever}] from champion ${championSha.slice(0, 8)}`,
+      `gen${gen}: propose ${batch}× [${levers.join(", ")}] from champion ${championSha.slice(0, 8)}`,
     );
     logEvent("gen.start", {
       gen,
-      lever,
+      levers,
+      batch,
       championSha,
       championDev,
-      remainingDevCases: devPlan?.remainingCases ?? null,
+      remainingDevCases: remaining,
     });
-    await resetTo(targetDir, championSha);
-    try {
-      await propose(cfg, lever, diagnose(championResult));
-    } catch (e: any) {
-      log(`gen${gen}: proposer error: ${e?.message || e} — skip`);
-      logEvent("gen.proposer_error", {
-        gen,
-        error: String(e?.stack || e).slice(0, 600),
-      });
+
+    // Best-of-N: propose each lever FROM the current champion, screen it on the
+    // SAME dev window (paired vs the champion's score), keep the highest scorer.
+    type Cand = {
+      sha: string;
+      lever: string;
+      score: number | null;
+      result: EvalResult;
+    };
+    const batchCands: Cand[] = [];
+    for (const lever of levers) {
+      await resetTo(targetDir, championSha);
+      try {
+        await propose(cfg, lever, diagnose(championResult), historyText());
+      } catch (e: any) {
+        log(`gen${gen}: proposer error [${lever}]: ${e?.message || e} — skip`);
+        logEvent("gen.proposer_error", {
+          gen,
+          lever,
+          error: String(e?.stack || e).slice(0, 600),
+        });
+        await resetTo(targetDir, championSha);
+        continue;
+      }
+      const candSha = await commitAll(targetDir, `gen${gen} [${lever}]`);
+      if (!candSha) {
+        log(`gen${gen}: no edit produced [${lever}] — skip`);
+        logEvent("gen.no_edit", { gen, lever });
+        continue;
+      }
+      const cand = await evals.evaluate(dev, devScreen, "cand-dev-screen");
+      record("cand-dev-screen", candSha, dev, devScreen, cand);
+      const d = num(cand.score) - num(championDev);
+      log(
+        `gen${gen}: [${lever}] dev=${fmt(cand.score)} vs champ ${fmt(championDev)} (Δ=${d.toFixed(4)})`,
+      );
+      batchCands.push({ sha: candSha, lever, score: cand.score, result: cand });
+    }
+
+    if (batchCands.length === 0) {
+      log(`gen${gen}: no scorable candidate this generation`);
       await resetTo(targetDir, championSha);
       continue;
     }
-    const candSha = await commitAll(targetDir, `gen${gen} [${lever}]`);
-    if (!candSha) {
-      log(`gen${gen}: no edit produced — skip`);
-      logEvent("gen.no_edit", { gen });
-      continue;
-    }
 
-    const cand = await evals.evaluate(dev, devScreen, "cand-dev-screen");
-    record("cand-dev-screen", candSha, dev, devScreen, cand);
+    // Retire every batch lever that did not beat the champion; the winner is
+    // re-credited below if it is accepted.
+    for (const c of batchCands) {
+      if (!better(c.score, championDev))
+        leverRegressions.set(
+          c.lever,
+          (leverRegressions.get(c.lever) ?? 0) + 1,
+        );
+    }
+    // Pick the best candidate of the batch (highest screen score).
+    batchCands.sort((a, b) => num(b.score) - num(a.score));
+    const best = batchCands[0];
+    const cand = best.result;
+    const candSha = best.sha;
+    const lever = best.lever;
     const screenWon = better(cand.score, championDev);
     const margin = num(cand.score) - num(championDev);
     const marginal = screenWon && margin <= oneCase * 1.0001; // <= one case flip
-    log(
-      `gen${gen}: candidate dev=${fmt(cand.score)} vs champ ${fmt(championDev)} (Δ=${margin.toFixed(4)}${marginal ? ", marginal" : ""})`,
-    );
 
     let accept = screenWon;
     if (screenWon && marginal && pairedRecheck) {
-      // Winner's-curse guard: re-evaluate BOTH champion and candidate on a fresh
-      // dev slice and accept only if the candidate wins on the pooled two draws.
+      // Winner's-curse guard: re-evaluate BOTH champion and the batch winner on a
+      // fresh dev slice; accept only if the candidate wins the pooled two draws.
       log(
-        `gen${gen}: marginal win — paired re-check on dev[${recheckSlice.start},${recheckSlice.stop})`,
+        `gen${gen}: marginal win [${lever}] — paired re-check on dev[${recheckSlice.start},${recheckSlice.stop})`,
       );
       await resetTo(targetDir, championSha);
       const champR = await evals.evaluate(
@@ -407,6 +497,7 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
       logEvent("gen.recheck", {
         gen,
         candSha,
+        lever,
         candScreen: cand.score,
         candRecheck: candR.score,
         champScreen: championDev,
@@ -418,25 +509,31 @@ export async function runLoop(cfg: LoopConfig): Promise<LoopResult> {
     logEvent("gen.decision", {
       gen,
       candSha,
+      lever,
       candScore: cand.score,
       championDev,
       marginal,
       accepted: accept,
+      batchSize: batchCands.length,
     });
+    triedHistory.push({ gen, lever, delta: margin, accepted: accept });
     if (accept) {
       championSha = candSha;
       championDev = cand.score;
       championResult = cand;
       accepted++;
+      leverRegressions.set(lever, 0); // a winning lever is rehabilitated
       addFinalist({
         sha: candSha,
         devScore: cand.score,
         label: `gen${gen} [${lever}]`,
       });
+      await resetTo(targetDir, championSha);
       log(
         `gen${gen}: ACCEPT (champion=${candSha.slice(0, 8)}, finalists=${finalists.length})`,
       );
     } else {
+      leverRegressions.set(lever, (leverRegressions.get(lever) ?? 0) + 1);
       await resetTo(targetDir, championSha);
       log(`gen${gen}: reject — keep champion ${championSha.slice(0, 8)}`);
     }

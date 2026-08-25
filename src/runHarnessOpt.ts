@@ -15,6 +15,7 @@
  *   VERO_CONTEXT_PATH         path to the .evals context (harbor sets this)
  *   OPENRSI_TARGET_DIR        default /work/agent
  *   OPENRSI_GENERATIONS       default 6
+ *   OPENRSI_CANDIDATES_PER_GEN best-of-N proposals screened per generation (default 2)
  *   OPENRSI_DEV_SUBSET        dev cases per iteration (default 8)
  *   OPENRSI_RESERVE_VAL       min val cases for the confirmation panel (default 8)
  *   OPENRSI_FINALISTS         distinct finalists carried to validation (default 3)
@@ -138,6 +139,7 @@ async function main() {
     val,
     model: buildOptimizerModel(),
     generations: Number(process.env.OPENRSI_GENERATIONS || 6),
+    candidatesPerGen: envNum("OPENRSI_CANDIDATES_PER_GEN") ?? 2,
     devSubset: Math.min(
       Number(process.env.OPENRSI_DEV_SUBSET || 8),
       dev.cases ?? Number(process.env.OPENRSI_DEV_SUBSET || 8),
